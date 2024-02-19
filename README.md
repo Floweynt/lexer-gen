@@ -1,6 +1,6 @@
 # Lexer gen
 
-Simple modern `c++20` lexer generator. 
+Simple modern `c++14` (or later) lexer generator. 
 
 ## Example 
 
@@ -62,7 +62,6 @@ struct lex_context
 };
 ```
 
-
 In turn, the lexer generator will create a function:
 ```cpp
 auto lex_tok(lex_context& ctx);
@@ -76,10 +75,14 @@ To generate source, run:
 lexer-gen lexer.leg -o lexer_impl.cpp
 ```
 
+Optionally add the `-c` flag to enable equivalence classes.
+
+More examples can be found under the `examples` directory.
+
 ## Building 
 Make sure you have `fmt` and `meson` installed, as well as a `c++20` compatible compiler.
 
-Run 
+Run:
 ```bash
 $ meson setup build --buildtype release
 $ cd release
@@ -89,8 +92,12 @@ $ ninja or make -j12
 ## Debugging 
 
 It is possible to dump the internal NFA (generated from the regular expressions) and the DFA (generated from NFA) as dot graphs:
-- `-D` - dump DFA 
-- `-N` - dump NFA 
+- `-D` - dump DFA
+- `-N` - dump NFA
 
 ## TODO 
-- Equivalence class
+- Support for other languages like `c`, `js`, `java`, etc
+- Better regular expression parsing (implement macros to reduce code duplication, with syntax like `{macro_name}`)
+- Better lexer specification parsing in general
+- Compact tables by using smaller bit-width types whenever possible 
+- Table padding and alignment

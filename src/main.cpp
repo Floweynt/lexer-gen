@@ -1,8 +1,10 @@
 
 #include "argparse.h"
+#include "fwd.h"
 #include "utils.h"
 #include <bitset>
 #include <cinttypes>
+#include <cstdint>
 #include <fmt/ranges.h>
 #include <fstream>
 #include <iostream>
@@ -38,6 +40,7 @@ inline static constexpr lexergen::option options[] = {
     {"dot-out", "--emit-dfa-dot", "-D", "specifies the output for the dot file for DFA graph visualization", true, false},
     {"nfa-out", "--emit-nfa-dot", "-N", "specifies the output for the dot file for NFA graph visualization", true, false},
     {"cpp-out", "--output", "-o", "specifies the output source file", true, true},
+    {"equivalence-class", "--equivalence-class", "-c", "enables equivalence classes, which usually results in a DFA smaller table", false, false},
 };
 
 auto main(int argc, const char* argv[]) -> int
@@ -60,6 +63,11 @@ auto main(int argc, const char* argv[]) -> int
     std::string line;
     while (std::getline(in_file, line))
     {
+        if (line == "%%")
+        {
+            break;
+        }
+
         if (line.empty() || line.starts_with(";") || line.starts_with("#"))
         {
             continue;
@@ -88,6 +96,8 @@ auto main(int argc, const char* argv[]) -> int
         tokens.emplace_back(entry, handler);
     }
 
+    std::string file_end = get_str_section(in_file);
+
     std::ofstream out(args["cpp-out"].value);
     if (!out)
     {
@@ -96,7 +106,12 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     auto [dfa, nfa] = lexergen::make_lexer(tokens);
-    dfa.codegen(out, preamble, handle_eof, handle_error, handle_internal_error);
+    dfa.codegen(out, preamble, handle_eof, handle_error, handle_internal_error, args["equivalence-class"].present);
+
+    if (!file_end.empty())
+    {
+        out << file_end;
+    }
 
     if (args["dot-out"].present)
     {

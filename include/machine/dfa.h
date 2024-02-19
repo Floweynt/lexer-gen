@@ -9,7 +9,7 @@
 namespace lexergen
 {
     auto make_lexer(const std::vector<std::pair<regex, std::string>>& table) -> std::pair<dfa, nfa_builder>;
- 
+
     class dfa
     {
         friend class nfa_builder;
@@ -25,7 +25,11 @@ namespace lexergen
 
     public:
         void simulate(std::string_view buffer, auto callback) const;
-        void codegen(std::ostream& out, std::string inc, std::string handle_eof, std::string handle_error, std::string handle_internal_error) const;
+        void codegen(
+            std::ostream& out, std::string inc, std::string handle_eof, std::string handle_error, std::string handle_internal_error,
+            bool equivalence_class
+        ) const;
         void dump(std::ostream& ofs);
+        constexpr auto get_transition_table() const -> const auto& { return transition_table; };
     };
 } // namespace lexergen

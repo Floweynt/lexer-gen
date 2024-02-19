@@ -1,5 +1,3 @@
-#pragma once
-
 #include <bitset>
 #include <memory>
 #include <regex.h>

@@ -2,58 +2,7 @@
 #include <machine/dfa.h>
 #include <machine/nfa.h>
 #include <unordered_set>
-
-namespace
-{
-    auto fmt_char(char ch) -> std::string
-    {
-        if (!isprint(ch))
-        {
-            return fmt::format("\\\\x{:02x}", (unsigned char)ch);
-        }
-        if (ch == '"')
-        {
-            return "\\\"";
-        }
-        if (ch == '\\')
-        {
-            return "\\\\";
-        }
-        return std::string(1, ch);
-    }
-
-    constexpr auto format_string_class(auto check) -> std::string
-    {
-        std::string out;
-
-        for (size_t ch = 0; ch < lexergen::BYTE_MAX; ch++)
-        {
-            size_t start_ch = ch;
-            while (check(ch) && ch < lexergen::BYTE_MAX)
-            {
-                ch++;
-            }
-            size_t end_ch = ch;
-            if (start_ch == end_ch)
-            {
-                continue;
-            }
-
-            if (start_ch + 1 == end_ch)
-            {
-                out += fmt_char((char)start_ch);
-            }
-            else
-            {
-                out += fmt::format("[{}-{}]", fmt_char((char)start_ch), fmt_char((char)(end_ch - 1)));
-            }
-        }
-
-        return out;
-    }
-
-} // namespace
-
+#include <utils.h>
 namespace lexergen
 {
     void dfa::dump(std::ostream& ofs)

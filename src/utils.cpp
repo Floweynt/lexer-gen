@@ -108,7 +108,7 @@ namespace lexergen
     struct char_transition_info
     {
         uint8_t ch;
-        std::span<size_t> transition;
+        std::span<const int64_t> transition;
 
         constexpr auto operator==(const char_transition_info& rhs) const -> bool
         {
@@ -144,14 +144,7 @@ struct std::hash<lexergen::char_transition_info>
 
 namespace lexergen
 {
-    struct equivalent_class_result
-    {
-        std::vector<uint8_t> classifier;
-        std::vector<uint8_t> transition;
-        size_t class_count;
-    };
-
-    auto build_equivalence_class(std::span<size_t> transition) -> equivalent_class_result
+    auto build_equivalence_class(std::span<const int64_t> transition) -> equivalent_class_result
     {
         std::unordered_map<char_transition_info, uint8_t> classes;
         size_t states = transition.size() / BYTE_MAX;
@@ -167,13 +160,13 @@ namespace lexergen
             classifier[i] = classes[inst];
         }
 
-        std::vector<uint8_t> equivalent_transition_table(classes.size() * states);
+        std::vector<int64_t> equivalent_transition_table(classes.size() * states);
         for (const auto& [equiv_candidate, class_id] : classes)
         {
             for (size_t state = 0; state < states; state++)
             {
-                equivalent_transition_table[state * classes.size() * class_id] =
-                    transition[state * BYTE_MAX + equiv_candidate.ch] == -1 ? -1 : classifier[transition[state * BYTE_MAX + equiv_candidate.ch]];
+                equivalent_transition_table[state * classes.size() + class_id] =
+                    transition[state * BYTE_MAX + equiv_candidate.ch] == -1 ? -1 : transition[state * BYTE_MAX + equiv_candidate.ch];
             }
         }
 

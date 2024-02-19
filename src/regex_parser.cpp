@@ -130,7 +130,7 @@ namespace lexergen
 
             return parse_char_class(chars, negate);
         }
-        else if (match('('))
+        if (match('('))
         {
             auto expr = parse_alt();
             if (match(')'))
@@ -138,8 +138,8 @@ namespace lexergen
                 return expr;
             }
             return nullptr;
-        }
-        else if (match('.'))
+        } 
+        if (match('.'))
         {
             return char_regex(!empty());
         }

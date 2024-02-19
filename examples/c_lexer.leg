@@ -1,0 +1,103 @@
+#include <string>
+#include <variant>
+#include <fmt/core.h>
+#include <fstream>
+#define tok_range start_line, start_col, ctx.line, ctx.col, start_bytes, ctx.bytes
+#define fmt_tok_range "@({}:{}-{}:{} {}-{})"
+struct lex_context
+{
+    std::istream& in = std::cin;
+    std::deque<char> buffer;
+    size_t peek_index;
+
+    size_t bytes, col, line;
+    size_t pbytes, pcol, pline;
+};
+%%
+fmt::println("TOK_EOF");
+return false;
+%%
+std::cerr << fmt::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
+exit(-1);
+%%
+std::cerr << fmt::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); 
+exit(-1);
+%%
+# adapted from https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
+\s+ -> break;
+"..." -> fmt::println("TOK_ELLIPSIS " fmt_tok_range, tok_range); return true;
+">>=" -> fmt::println("TOK_RIGHT_ASSIGN " fmt_tok_range, tok_range); return true;
+"<<=" -> fmt::println("TOK_LEFT_ASSIGN " fmt_tok_range, tok_range); return true;
+"+=" -> fmt::println("TOK_ADD_ASSIGN " fmt_tok_range, tok_range); return true;
+"-=" -> fmt::println("TOK_SUB_ASSIGN " fmt_tok_range, tok_range); return true;
+"*=" -> fmt::println("TOK_MUL_ASSIGN " fmt_tok_range, tok_range); return true;
+"/=" -> fmt::println("TOK_DIV_ASSIGN " fmt_tok_range, tok_range); return true;
+"%=" -> fmt::println("TOK_MOD_ASSIGN " fmt_tok_range, tok_range); return true;
+"&=" -> fmt::println("TOK_AND_ASSIGN " fmt_tok_range, tok_range); return true;
+"^=" -> fmt::println("TOK_XOR_ASSIGN " fmt_tok_range, tok_range); return true;
+"|=" -> fmt::println("TOK_OR_ASSIGN " fmt_tok_range, tok_range); return true;
+">>" -> fmt::println("TOK_RIGHT_OP " fmt_tok_range, tok_range); return true;
+"<<" -> fmt::println("TOK_LEFT_OP " fmt_tok_range, tok_range); return true;
+"++" -> fmt::println("TOK_INC_OP " fmt_tok_range, tok_range); return true;
+"--" -> fmt::println("TOK_DEC_OP " fmt_tok_range, tok_range); return true;
+"->" -> fmt::println("TOK_PTR_OP " fmt_tok_range, tok_range); return true;
+"&&" -> fmt::println("TOK_AND_OP " fmt_tok_range, tok_range); return true;
+"||" -> fmt::println("TOK_OR_OP " fmt_tok_range, tok_range); return true;
+"<=" -> fmt::println("TOK_LE_OP " fmt_tok_range, tok_range); return true;
+">=" -> fmt::println("TOK_GE_OP " fmt_tok_range, tok_range); return true;
+"==" -> fmt::println("TOK_EQ_OP " fmt_tok_range, tok_range); return true;
+"!=" -> fmt::println("TOK_NE_OP " fmt_tok_range, tok_range); return true;
+";" -> fmt::println("TOK(';') " fmt_tok_range, tok_range); return true;
+"{" -> fmt::println("TOK('{') " fmt_tok_range, tok_range); return true;
+"}" -> fmt::println("TOK('}') " fmt_tok_range, tok_range); return true;
+"," -> fmt::println("TOK(',') " fmt_tok_range, tok_range); return true;
+":" -> fmt::println("TOK(':') " fmt_tok_range, tok_range); return true;
+"=" -> fmt::println("TOK('=') " fmt_tok_range, tok_range); return true;
+"(" -> fmt::println("TOK('(') " fmt_tok_range, tok_range); return true;
+")" -> fmt::println("TOK(')') " fmt_tok_range, tok_range); return true;
+"[" -> fmt::println("TOK('[') " fmt_tok_range, tok_range); return true;
+"]" -> fmt::println("TOK(']') " fmt_tok_range, tok_range); return true;
+"." -> fmt::println("TOK('.') " fmt_tok_range, tok_range); return true;
+"&" -> fmt::println("TOK('&') " fmt_tok_range, tok_range); return true;
+"!" -> fmt::println("TOK('!') " fmt_tok_range, tok_range); return true;
+"~" -> fmt::println("TOK('~') " fmt_tok_range, tok_range); return true;
+"-" -> fmt::println("TOK('-') " fmt_tok_range, tok_range); return true;
+"+" -> fmt::println("TOK('+') " fmt_tok_range, tok_range); return true;
+"*" -> fmt::println("TOK('*') " fmt_tok_range, tok_range); return true;
+"/" -> fmt::println("TOK('/') " fmt_tok_range, tok_range); return true;
+"%" -> fmt::println("TOK('%') " fmt_tok_range, tok_range); return true;
+"<" -> fmt::println("TOK('<') " fmt_tok_range, tok_range); return true;
+">" -> fmt::println("TOK('>') " fmt_tok_range, tok_range); return true;
+"^" -> fmt::println("TOK('^') " fmt_tok_range, tok_range); return true;
+"|" -> fmt::println("TOK('|') " fmt_tok_range, tok_range); return true;
+"?" -> fmt::println("TOK('?') " fmt_tok_range, tok_range); return true;
+
+# identifier
+[A-Za-z_]\w* -> fmt::println("TOK_IDENTIFIER('{}') " fmt_tok_range, buffer, tok_range); return true;
+
+# hex 
+0[xX][0-9a-fA-F]+[A-Za-z_]\w* -> fmt::println("TOK_HEX({}) " fmt_tok_range, buffer, tok_range); return true;
+# oct
+0[0-7]+[A-Za-z_]\w* -> fmt::println("TOK_OCT({}) " fmt_tok_range, buffer, tok_range); return true;
+# dec
+\d+[A-Za-z_]\w* -> fmt::println("TOK_DEC({}) " fmt_tok_range, buffer, tok_range); return true;
+
+# char/string literals 
+L?'((\\.)|[^\\'])+' -> fmt::println("TOK_CHAR({}) " fmt_tok_range, buffer, tok_range); return true;
+L?"((\\.)|[^\\"])*" -> fmt::println("TOK_STRING({}) " fmt_tok_range, buffer, tok_range); return true;
+%%
+
+// this will be inserted at the end of the file
+int main() 
+{
+    lex_context context;
+    context.peek_index = 0;
+    context.bytes = 0;
+    context.col = 0;
+    context.line = 1;
+    context.pbytes = 0;
+    context.pcol = 0;
+    context.pline = 1;
+
+    while(lex_tok(context));
+}

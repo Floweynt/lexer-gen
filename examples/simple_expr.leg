@@ -1,0 +1,72 @@
+// the following will be inserted near the top of the file 
+// define macros, etc 
+#include <string>
+#include <variant>
+#include <fmt/core.h>
+#include <fstream>
+#define tok_range start_line, start_col, ctx.line, ctx.col, start_bytes, ctx.bytes
+#define fmt_tok_range "@({}:{}-{}:{} {}-{})"
+struct lex_context
+{
+    std::istream& in = std::cin;
+    std::deque<char> buffer;
+    size_t peek_index;
+
+    size_t bytes, col, line;
+    size_t pbytes, pcol, pline;
+};
+%%
+// EOF handler
+fmt::println("TOK_EOF");
+return false;
+%%
+// token parsing failure handler 
+std::cerr << fmt::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
+exit(-1);
+%%
+// internal error handler 
+std::cerr << fmt::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); 
+exit(-1);
+%%
+# rules, use '#' for comments
+# keep in mind that rules and actions must be split by a " -> "
+# and use "..." for literal strings (no regex)
+# otherwise all rules will be interpreted as regular expressions 
+# note that the actions will be inserted as switch statements, so use {} if you want to declare locals 
+
+# you can use breaks to restart processing, this is useful for ignoring whitespace 
+\s* -> break;
+# most regular expression things exists, like character classes 
+# NOTE: while you can match keywords here, this isn't recommended because 
+# 1. bloats lexer table size, which decreases transition table cache performance 
+# 2. worse equivalence class performance, since each letter is now different and non-equivalent
+# it is recommended that you process identifiers with a string pool, or store hashes with identifiers
+# this allows for fast identifier matching, both for keywords and for symbol table lookups
+[a-zA-Z_]\w* -> fmt::println("TOK_IDENT({}) " fmt_tok_range, buffer, tok_range); return true;
+\d+ -> fmt::println("TOK_NUMBER({}) " fmt_tok_range, buffer, tok_range); return true;
+
+# example of using quoted string literals to do exact matching
+"+" -> fmt::println("TOK_ADD " fmt_tok_range, tok_range); return true;
+"-" -> fmt::println("TOK_SUB " fmt_tok_range, tok_range); return true;
+"/" -> fmt::println("TOK_MUL " fmt_tok_range, tok_range); return true;
+"*" -> fmt::println("TOK_DIV " fmt_tok_range, tok_range); return true;
+"(" -> fmt::println("TOK_PAREN_OPEN " fmt_tok_range, tok_range); return true;
+")" -> fmt::println("TOK_PAREN_CLOSE " fmt_tok_range, tok_range); return true;
+
+# keep in mind that this lexer is greedy, so ++ would be TOK_INCR rather than TOK_ADD TOK_ADD
+"++" -> fmt::println("TOK_INCR" fmt_tok_range, tok_range); return true;
+%%
+// this will be inserted at the end of the file
+int main() 
+{
+    lex_context context;
+    context.peek_index = 0;
+    context.bytes = 0;
+    context.col = 0;
+    context.line = 1;
+    context.pbytes = 0;
+    context.pcol = 0;
+    context.pline = 1;
+
+    while(lex_tok(context));
+}

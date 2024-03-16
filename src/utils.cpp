@@ -3,6 +3,7 @@
 #include <functional>
 #include <iostream>
 #include <span>
+#include <type_traits>
 #include <unordered_map>
 #include <utils.h>
 #include <vector>
@@ -22,6 +23,7 @@ namespace lexergen
                     std::cerr << "invalid escape sequence at end of string\n";
                     exit(-1);
                 }
+
                 switch (str[i + 1])
                 {
                 case 'n':
@@ -42,6 +44,9 @@ namespace lexergen
                 case '\\':
                     result += '\\';
                     break;
+                case '0':
+                    result.push_back('\0');
+                    break;
                 case 'x': {
                     if (i + 3 >= str.length())
                     {
@@ -50,47 +55,8 @@ namespace lexergen
                     }
                     char hex[3] = {str[i + 2], str[i + 3], '\0'};
                     int value = std::stoi(hex, nullptr, 16);
-                    result += static_cast<char>(value);
-                    i += 3; // skip the next 3 characters (the \x and two hex digits)
-                    break;
-                }
-                case '0': {
-                    bool valid = false;
-                    int value = 0;
-                    for (int j = i + 1; j <= i + 3 && j < str.length(); j++)
-                    {
-                        if (str[j] >= '0' && str[j] <= '7')
-                        {
-                            valid = true;
-                            value = (value << 3) + (str[j] - '0');
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                    if (!valid)
-                    {
-                        if (i + 1 == str.length() || (i + 2 < str.length() && str[i + 2] >= '0' && str[i + 2] <= '7'))
-                        {
-                            result += '\0';
-                            i++; // skip the next character ('\0')
-                        }
-                        else
-                        {
-                            std::cerr << "incomplete or invalid octal escape sequence";
-                            exit(-1);
-                        }
-                    }
-                    else
-                    {
-                        result += static_cast<char>(value);
-                        i += 3; // skip the next 3 characters (the \0 and up to three octal digits)
-                    }
-                    break;
-                }
-                default: {
-                    result += str[i + 1]; // append the character
+                    result.push_back(static_cast<char>(value));
+                    i += 2; // skip the next 3 characters (the \x and two hex digits)
                     break;
                 }
                 }
@@ -98,11 +64,11 @@ namespace lexergen
             }
             else
             {
-                result += str[i];
+                result.push_back(str[i]);
             }
         }
 
-        return str;
+        return result;
     }
 
     struct char_transition_info

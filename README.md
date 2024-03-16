@@ -101,3 +101,5 @@ It is possible to dump the internal NFA (generated from the regular expressions)
 - Better lexer specification parsing in general
 - Compact tables by using smaller bit-width types whenever possible 
 - Table padding and alignment
+- Actually release the tree-sitter grammar
+- Parser generator

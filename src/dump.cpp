@@ -5,6 +5,31 @@
 #include <utils.h>
 namespace lexergen
 {
+    namespace
+    {
+        constexpr void replace_all(std::string& str, const std::string& from, const std::string& to)
+        {
+            if (from.empty())
+            {
+                return;
+            }
+
+            size_t start_pos = 0;
+            while ((start_pos = str.find(from, start_pos)) != std::string::npos)
+            {
+                str.replace(start_pos, from.length(), to);
+                start_pos += to.length();
+            }
+        }
+
+        constexpr auto format_string_class_dot(auto check) -> std::string
+        {
+            auto str = format_string_class(check);
+            replace_all(str, "\\", "\\\\");
+            return str;
+        }
+    } // namespace
+
     void dfa::dump(std::ostream& ofs)
     {
         ofs << "digraph G{";
@@ -22,7 +47,7 @@ namespace lexergen
 
             for (auto entry : target_set)
             {
-                ofs << fmt::format("{} -> {} [label=\"{}\"]\n", i, entry, format_string_class([this, i, entry](size_t ch) {
+                ofs << fmt::format("{} -> {} [label=\"{}\"]\n", i, entry, format_string_class_dot([this, i, entry](size_t ch) {
                                        return transition_table[i * BYTE_MAX + ch] == entry;
                                    }));
             }
@@ -51,7 +76,7 @@ namespace lexergen
         {
             for (const auto& [to, ch_map] : to_map)
             {
-                ofs << fmt::format("{} -> {} [label=\"{}\"]\n", from, to, format_string_class([&](size_t ch) { return ch_map[ch]; }));
+                ofs << fmt::format("{} -> {} [label=\"{}\"]\n", from, to, format_string_class_dot([&](size_t ch) { return ch_map[ch]; }));
             }
         }
 

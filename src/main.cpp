@@ -40,6 +40,9 @@ inline static constexpr lexergen::option options[] = {
     {"dot-out", "--emit-dfa-dot", "-D", "specifies the output for the dot file for DFA graph visualization", true, false},
     {"nfa-out", "--emit-nfa-dot", "-N", "specifies the output for the dot file for NFA graph visualization", true, false},
     {"cpp-out", "--output", "-o", "specifies the output source file", true, true},
+//    {"alignment", "--align", "-a", "specifies that equivalence classes should be padded to 2^n, or next 2^n if set to auto", true, false},
+ //   {"type", "--type", "-t", "enables smallest int type selection", false, false},
+
     {"equivalence-class", "--equivalence-class", "-c", "enables equivalence classes, which usually results in a DFA smaller table", false, false},
 };
 

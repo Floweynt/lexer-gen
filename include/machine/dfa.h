@@ -26,7 +26,7 @@ namespace lexergen
     public:
         void simulate(std::string_view buffer, auto callback) const;
         void codegen(
-            std::ostream& out, std::string inc, std::string handle_eof, std::string handle_error, std::string handle_internal_error,
+            std::ostream& out, std::string inc,std::string handle_error, std::string handle_internal_error,
             bool equivalence_class
         ) const;
         void dump(std::ostream& ofs);

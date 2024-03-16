@@ -58,7 +58,6 @@ auto main(int argc, const char* argv[]) -> int
 
     std::ifstream in_file(files[0]);
     std::string preamble = get_str_section(in_file);
-    std::string handle_eof = get_str_section(in_file);
     std::string handle_error = get_str_section(in_file);
     std::string handle_internal_error = get_str_section(in_file);
     std::vector<std::pair<lexergen::regex, std::string>> tokens;
@@ -109,7 +108,7 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     auto [dfa, nfa] = lexergen::make_lexer(tokens);
-    dfa.codegen(out, preamble, handle_eof, handle_error, handle_internal_error, args["equivalence-class"].present);
+    dfa.codegen(out, preamble, handle_error, handle_internal_error, args["equivalence-class"].present);
 
     if (!file_end.empty())
     {

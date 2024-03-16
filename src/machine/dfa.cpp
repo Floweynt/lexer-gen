@@ -66,11 +66,6 @@ static void commit_to_buffer(C& output, lex_context& ctx)
 
 auto lex_tok(lex_context& ctx)
 {{
-    if(ctx.in.eof())
-    {{ 
-        {} 
-    }}
-
     int64_t state = START_STATE;
     int64_t latest_match = -1;
     std::string buffer;
@@ -88,7 +83,7 @@ auto lex_tok(lex_context& ctx)
             commit_to_buffer(buffer, ctx);
         }}
 
-        if (state == -1 || ctx.in.eof())
+        if (state == -1)
         {{
             if (latest_match == -1)
             {{
@@ -112,11 +107,6 @@ auto lex_tok(lex_context& ctx)
             start_line = ctx.line;
             start_col = ctx.col;
             start_bytes = ctx.bytes;
-            
-            if(ctx.in.eof())
-            {{ 
-                {} 
-            }}
 
             continue;
         }}
@@ -187,11 +177,6 @@ static void commit_to_buffer(C& output, lex_context& ctx)
 
 auto lex_tok(lex_context& ctx)
 {{
-    if(ctx.in.eof())
-    {{ 
-        {} 
-    }}
-
     int64_t state = START_STATE;
     int64_t latest_match = -1;
     std::string buffer;
@@ -209,7 +194,7 @@ auto lex_tok(lex_context& ctx)
             commit_to_buffer(buffer, ctx);
         }}
 
-        if (state == -1 || ctx.in.eof())
+        if (state == -1)
         {{
             if (latest_match == -1)
             {{
@@ -232,13 +217,6 @@ auto lex_tok(lex_context& ctx)
             start_line = ctx.line;
             start_col = ctx.col;
             start_bytes = ctx.bytes;
-            
-            if(ctx.in.eof())
-            {{ 
-                {} 
-            }}
-
-            continue;
         }}
     }}
 }})";
@@ -280,7 +258,7 @@ namespace lexergen
     }
 
     void dfa::codegen(
-        std::ostream& out, std::string inc, std::string handle_eof, std::string handle_error, std::string handle_internal_error,
+        std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error,
         bool equivalence_class
     ) const
     {
@@ -304,15 +282,14 @@ namespace lexergen
             }
             out << fmt::format(
                 FMT_CODEGEN_EQUIVALENCE_CLASS, inc, fmt::join(new_tab, ","), start_state, fmt::join(end_bitmask, ","),
-                fmt::join(end_to_nfa_state, ","), fmt::join(classifier, ","), classes, handle_eof, handle_error, switch_str, handle_internal_error,
-                handle_eof
+                fmt::join(end_to_nfa_state, ","), fmt::join(classifier, ","), classes, handle_error, switch_str, handle_internal_error
             );
         }
         else
         {
             out << fmt::format(
                 FMT_CODEGEN_REGULAR, inc, fmt::join(transition_table, ","), start_state, fmt::join(end_bitmask, ","),
-                fmt::join(end_to_nfa_state, ","), handle_eof, handle_error, switch_str, handle_internal_error, handle_eof
+                fmt::join(end_to_nfa_state, ","), handle_error, switch_str, handle_internal_error
             );
         }
     }

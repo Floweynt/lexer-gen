@@ -14,9 +14,6 @@ struct lex_context
     size_t pbytes, pcol, pline;
 };
 %%
-fmt::println("TOK_EOF");
-return false;
-%%
 std::cerr << fmt::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
 exit(-1);
 %%
@@ -25,6 +22,7 @@ exit(-1);
 %%
 # adapted from https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
 \s+ -> break;
+"\0" -> fmt::println("TOK_EOF"); return false;
 "..." -> fmt::println("TOK_ELLIPSIS " fmt_tok_range, tok_range); return true;
 ">>=" -> fmt::println("TOK_RIGHT_ASSIGN " fmt_tok_range, tok_range); return true;
 "<<=" -> fmt::println("TOK_LEFT_ASSIGN " fmt_tok_range, tok_range); return true;

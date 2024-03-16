@@ -15,11 +15,6 @@ struct lex_context
     size_t bytes, col, line;
     size_t pbytes, pcol, pline;
 };
-%%
-// EOF handler
-fmt::println("TOK_EOF");
-return false;
-%%
 // token parsing failure handler 
 std::cerr << fmt::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
 exit(-1);
@@ -36,6 +31,10 @@ exit(-1);
 
 # you can use breaks to restart processing, this is useful for ignoring whitespace 
 \s* -> break;
+
+# you should probably match null bytes to detect end of file
+"\0" -> fmt::println("TOK_EOF"); return false;
+
 # most regular expression things exists, like character classes 
 # NOTE: while you can match keywords here, this isn't recommended because 
 # 1. bloats lexer table size, which decreases transition table cache performance 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "fwd.h"
+#include "utils.h"
+#include <cstdint>
 #include <ostream>
 #include <regex.h>
 #include <unordered_map>
@@ -25,11 +27,15 @@ namespace lexergen
 
     public:
         void simulate(std::string_view buffer, auto callback) const;
-        void codegen(
+        auto codegen(
             std::ostream& out, std::string inc,std::string handle_error, std::string handle_internal_error,
             bool equivalence_class
-        ) const;
+        ) const -> equivalent_class_result;
         void dump(std::ostream& ofs);
-        constexpr auto get_transition_table() const -> const auto& { return transition_table; };
+
+        constexpr auto get_transition_table() const -> const auto& { return transition_table; }
+        constexpr auto get_start_state() const -> const auto& { return start_state; }
+        constexpr auto get_end_bitmask() const -> const auto& { return end_bitmask; }
+        constexpr auto get_end_to_nfa_state() const -> const auto& { return end_to_nfa_state; }
     };
 } // namespace lexergen

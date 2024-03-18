@@ -1,3 +1,4 @@
+#include <iostream>
 #include <list>
 #include <machine/nfa.h>
 #include <queue>
@@ -111,6 +112,11 @@ namespace lexergen
                 // if this state contains an end node...
                 if (entry.first[nfa_node_id])
                 {
+                    if( ret.end_bitmask[entry.second])
+                    {
+                        std::cerr << fmt::format("possible conflict between states {} and {}\n", ret.end_to_nfa_state[entry.second], nfa_node_id);
+                    }
+
                     ret.end_bitmask[entry.second] = true;
                     // we store the end state type from the NFA
                     ret.end_to_nfa_state[entry.second] = nfa_node_id;

@@ -257,10 +257,8 @@ namespace lexergen
         }
     }
 
-    void dfa::codegen(
-        std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error,
-        bool equivalence_class
-    ) const
+    auto dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class) const
+        -> equivalent_class_result
     {
         std::string switch_str;
         for (const auto& handler : handler_map)
@@ -284,13 +282,23 @@ namespace lexergen
                 FMT_CODEGEN_EQUIVALENCE_CLASS, inc, fmt::join(new_tab, ","), start_state, fmt::join(end_bitmask, ","),
                 fmt::join(end_to_nfa_state, ","), fmt::join(classifier, ","), classes, handle_error, switch_str, handle_internal_error
             );
+
+            return {
+                std::move(classifier),
+                std::move(new_tab),
+                classes,
+            };
         }
-        else
-        {
-            out << fmt::format(
-                FMT_CODEGEN_REGULAR, inc, fmt::join(transition_table, ","), start_state, fmt::join(end_bitmask, ","),
-                fmt::join(end_to_nfa_state, ","), handle_error, switch_str, handle_internal_error
-            );
-        }
+
+        out << fmt::format(
+            FMT_CODEGEN_REGULAR, inc, fmt::join(transition_table, ","), start_state, fmt::join(end_bitmask, ","), fmt::join(end_to_nfa_state, ","),
+            handle_error, switch_str, handle_internal_error
+        );
+
+        return {
+            {},
+            transition_table,
+            0,
+        };
     }
 } // namespace lexergen

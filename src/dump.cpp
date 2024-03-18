@@ -26,6 +26,7 @@ namespace lexergen
         {
             auto str = format_string_class(check);
             replace_all(str, "\\", "\\\\");
+            replace_all(str, R"(\\")", "\\\"");
             return str;
         }
     } // namespace
@@ -39,7 +40,7 @@ namespace lexergen
 
             for (size_t ch = 0; ch < BYTE_MAX; ch++)
             {
-                if (transition_table[i * BYTE_MAX + ch] != -1UL)
+                if (transition_table[i * BYTE_MAX + ch] != -1)
                 {
                     target_set.insert(transition_table[i * BYTE_MAX + ch]);
                 }
@@ -47,7 +48,7 @@ namespace lexergen
 
             for (auto entry : target_set)
             {
-                ofs << fmt::format("{} -> {} [label=\"{}\"]\n", i, entry, format_string_class_dot([this, i, entry](size_t ch) {
+                ofs << fmt::format("{} -> {} [label=\"{}\"]\n", i, entry, format_string_class_dot([this, i, entry](auto ch) {
                                        return transition_table[i * BYTE_MAX + ch] == entry;
                                    }));
             }

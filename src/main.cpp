@@ -1,10 +1,10 @@
-
 #include "argparse.h"
 #include "fwd.h"
 #include "utils.h"
 #include <bitset>
 #include <cinttypes>
 #include <cstdint>
+#include <fmt/core.h>
 #include <fmt/ranges.h>
 #include <fstream>
 #include <iostream>
@@ -12,6 +12,7 @@
 #include <machine/dfa.h>
 #include <machine/nfa.h>
 #include <queue>
+#include <ranges>
 #include <regex.h>
 #include <span>
 #include <string>
@@ -40,9 +41,9 @@ inline static constexpr lexergen::option options[] = {
     {"dot-out", "--emit-dfa-dot", "-D", "specifies the output for the dot file for DFA graph visualization", true, false},
     {"nfa-out", "--emit-nfa-dot", "-N", "specifies the output for the dot file for NFA graph visualization", true, false},
     {"cpp-out", "--output", "-o", "specifies the output source file", true, true},
-//    {"alignment", "--align", "-a", "specifies that equivalence classes should be padded to 2^n, or next 2^n if set to auto", true, false},
- //   {"type", "--type", "-t", "enables smallest int type selection", false, false},
-
+    //    {"alignment", "--align", "-a", "specifies that equivalence classes should be padded to 2^n, or next 2^n if set to auto", true, false},
+    //   {"type", "--type", "-t", "enables smallest int type selection", false, false},
+    {"debug", "--debug", "-d", "print some internal information", false, false},
     {"equivalence-class", "--equivalence-class", "-c", "enables equivalence classes, which usually results in a DFA smaller table", false, false},
 };
 
@@ -108,7 +109,7 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     auto [dfa, nfa] = lexergen::make_lexer(tokens);
-    dfa.codegen(out, preamble, handle_error, handle_internal_error, args["equivalence-class"].present);
+    auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, args["equivalence-class"].present);
 
     if (!file_end.empty())
     {
@@ -137,5 +138,39 @@ auto main(int argc, const char* argv[]) -> int
         }
 
         nfa.dump(dot_out);
+    }
+
+    if (args["debug"].present)
+    {
+        fmt::print("transition table (rle): ");
+        const auto& tab = res.transition;
+        size_t rle_count = 0;
+        auto rle_curr = tab[0];
+
+        for (auto ent : tab)
+        {
+            if (ent != rle_curr)
+            {
+                fmt::print("({}, {}), ", rle_curr, rle_count);
+                rle_count = 1;
+                rle_curr = ent;
+            }
+            else
+            {
+                rle_count++;
+            }
+        }
+        fmt::println("({}, {})", rle_curr, rle_count);
+        fmt::println("transition table takes: {} i64 = {} bytes", tab.size(), tab.size() * sizeof(int64_t));
+        fmt::println("start state: {}", dfa.get_start_state());
+        fmt::println("bitmask {}", fmt::join(dfa.get_end_bitmask() | std::ranges::views::transform([](bool flag) { return (int)flag; }), ""));
+        fmt::println("states {}", dfa.get_end_bitmask().size());
+        fmt::println("state mapping {}", dfa.get_end_to_nfa_state());
+
+        if (args["equivalence-class"].present)
+        {
+            fmt::println("classifier: {}", res.classifier);
+            fmt::println("classes: {}", res.class_count);
+        }
     }
 }

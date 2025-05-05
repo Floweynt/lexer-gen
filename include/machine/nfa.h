@@ -1,16 +1,15 @@
 #pragma once
 
-#include <machine/dfa.h>
-#include <bitset>
+#include "dfa.h"
+#include <algorithm>
+#include <concepts>
 #include <cstdint>
-#include <fmt/core.h>
 #include <ostream>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace lexergen
 {
-
     class nfa_builder
     {
         struct entry
@@ -30,7 +29,7 @@ namespace lexergen
 
         template <std::convertible_to<char>... Args>
             requires(sizeof...(Args) > 1)
-        constexpr auto transition(int64_t source, int64_t target, Args&&... val) -> nfa_builder&
+        constexpr auto transition(int64_t source, int64_t target, Args... val) -> nfa_builder&
         {
             return transition(source, target, {((char)val)...});
         }
@@ -46,14 +45,14 @@ namespace lexergen
 
         constexpr auto transition(int64_t from, int64_t end, char ch) -> nfa_builder&
         {
-            max_val = std::max(std::max(max_val, from), end);
+            max_val = std::max({max_val, from, end});
             edges.push_back({from, end, ch});
             return *this;
         }
 
         constexpr auto epsilon(int64_t from, int64_t end) -> nfa_builder&
         {
-            max_val = std::max(std::max(max_val, from), end);
+            max_val = std::max({max_val, from, end});
             epsilon_edges.emplace_back(from, end);
             return *this;
         }

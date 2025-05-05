@@ -1,24 +1,15 @@
 #pragma once
 
 #include "fwd.h"
-#include <cstdint>
-#include <fmt/core.h>
-#include <span>
+#include <cctype>
+#include <cstddef>
+#include <format>
+#include <print>
 #include <string>
 #include <vector>
 
 namespace lexergen
 {
-    struct equivalent_class_result
-    {
-        std::vector<uint8_t> classifier;
-        std::vector<int64_t> transition;
-        size_t class_count;
-    };
-
-    auto handle_escape_str(const std::string& str) -> std::string;
-    auto build_equivalence_class(std::span<const int64_t> transition) -> equivalent_class_result;
-
     constexpr auto fmt_char(char ch) -> std::string
     {
         switch (ch)
@@ -49,9 +40,9 @@ namespace lexergen
 
         if (!isprint(ch))
         {
-            return fmt::format("\\x{:02x}", (unsigned char)ch);
+            return std::format("\\x{:02x}", (unsigned char)ch);
         }
-        
+
         return std::string(1, ch);
     }
 
@@ -78,10 +69,23 @@ namespace lexergen
             }
             else
             {
-                out += fmt::format("[{}-{}]", fmt_char((char)start_ch), fmt_char((char)(end_ch - 1)));
+                out += std::format("[{}-{}]", fmt_char((char)start_ch), fmt_char((char)(end_ch - 1)));
             }
         }
 
         return out;
+    }
+
+    template <typename T>
+    constexpr auto format_table(const std::vector<T>& vec) -> std::string
+    {
+        std::string buf;
+        for (auto ent : vec)
+        {
+            buf += std::to_string(ent);
+            buf.push_back(',');
+        }
+        buf.pop_back();
+        return buf;
     }
 } // namespace lexergen

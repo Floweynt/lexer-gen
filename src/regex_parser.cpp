@@ -1,355 +1,378 @@
-#include <iostream>
-#include <regex.h>
+#include "regex.h"
+#include <bitset>
+#include <cassert>
+#include <cctype>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
-namespace lexergen
+#define YIELD_TOK(sw, t)                                                                                                                             \
+    case sw:                                                                                                                                         \
+        return { .ch = ch, .type = t }
+#define YIELD_CH(sw, c)                                                                                                                              \
+    case sw:                                                                                                                                         \
+        return { .ch = c, .type = tok::TOK_CHAR }
+
+#define _case(cond, body)                                                                                                                            \
+    case cond: {                                                                                                                                     \
+        body;                                                                                                                                        \
+    }                                                                                                                                                \
+    break
+
+using namespace lexergen;
+
+namespace
 {
-    void regex_parser::error(std::string msg) { errors.emplace_back(std::move(msg)); }
-
-    auto regex_parser::peek() const -> char { return curr_pos < curr_regex.size() ? curr_regex[curr_pos] : '\0'; }
-
-    auto regex_parser::eof() const -> bool { return curr_pos >= curr_regex.size(); }
-
-    auto regex_parser::match(char ch) -> bool
+    struct tok
     {
-        if (peek() == ch)
-        {
-            ++curr_pos;
-            return true;
-        }
-        return false;
-    }
+        char ch;
 
-    auto regex_parser::parse_char() -> regex
+        enum : uint8_t
+        {
+            TOK_CHAR,                   // regular char
+            TOK_GROUP_OPEN,             // (
+            TOK_GROUP_CLOSE,            // )
+            TOK_CHAR_OPEN,              // [
+            TOK_CHAR_CLOSE,             // ]
+            TOK_PLUS,                   // +
+            TOK_WILDCARD,               // .
+            TOK_STAR,                   // *
+            TOK_OPT,                    // ?
+            TOK_ALT,                    // |
+            TOK_STR,                    // "
+            TOK_NOT,                    // ^
+            TOK_DASH,                   // -
+            TOK_CHARSET_ALPHA,          // \w
+            TOK_CHARSET_NOT_ALPHA,      // \W
+            TOK_CHARSET_DIGIT,          // \d
+            TOK_CHARSET_NOT_DIGIT,      // \D
+            TOK_CHARSET_WHITESPACE,     // \s
+            TOK_CHARSET_NOT_WHITESPACE, // \S
+            TOK_DELIM,                  // /
+            TOK_EOF,
+        } type;
+    };
+
+    struct regex_parse_error : std::runtime_error
     {
-        if (peek() == '\\')
+        regex_parse_error(const std::string& str) : std::runtime_error(str) {}
+    };
+
+    struct regex_reader
+    {
+        const std::string& str;
+        int index{};
+        tok curr_token{};
+
+        auto lex_tok() -> tok
         {
-            match('\\');
-            char ch = peek();
 
-            if (ch == 'n')
+            if (index >= str.size())
             {
-                next();
-                return char_regex('\n');
-            }
-            if (ch == '\\')
-            {
-                next();
-                return char_regex('\\');
+                return {.ch = '\0', .type = tok::TOK_EOF};
             }
 
-            if (ch == 'w' || ch == 'd' || ch == 's' || ch == 'W' || ch == 'D' || ch == 'S')
+            char ch = str[index++];
+
+            switch (ch)
             {
-                match(ch);
+            case '\\': {
+                if (index == str.size())
+                {
+                    return {.ch = ch, .type = tok::TOK_CHAR};
+                }
+
+                ch = str[index++];
+
                 switch (ch)
                 {
-                case 'w':
-                    return char_regex(alphanumeric());
-                case 'W':
-                    return char_regex(!alphanumeric());
-                case 'd':
-                    return char_regex(digit());
-                case 'D':
-                    return char_regex(!digit());
-                case 's':
-                    return char_regex(whitespace());
-                case 'S':
-                    return char_regex(!whitespace());
+                    YIELD_TOK('w', tok::TOK_CHARSET_ALPHA);
+                    YIELD_TOK('W', tok::TOK_CHARSET_NOT_ALPHA);
+                    YIELD_TOK('d', tok::TOK_CHARSET_DIGIT);
+                    YIELD_TOK('D', tok::TOK_CHARSET_NOT_DIGIT);
+                    YIELD_TOK('s', tok::TOK_CHARSET_WHITESPACE);
+                    YIELD_TOK('S', tok::TOK_CHARSET_NOT_WHITESPACE);
+                    YIELD_CH('a', '\a');
+                    YIELD_CH('f', '\f');
+                    YIELD_CH('n', '\n');
+                    YIELD_CH('r', '\r');
+                    YIELD_CH('t', '\t');
+                    YIELD_CH('v', '\v');
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7': { // Handle octal escape sequence
+                    int val = ch - '0';
+                    // eat the *next* 2 characters
+                    for (int i = 0; i < 2 && index < str.size() && str[index] >= '0' && str[index] <= '7'; i++)
+                    {
+                        val = (val << 3) | (str[index++] - '0');
+                    }
+                    return {.ch = (char) val, .type = tok::TOK_CHAR};
+                }
+                case 'x': { // Handle hexadecimal escape sequence
+                    int val = 0;
+                    for (int i = 0; i < 2 && index < str.size() && isxdigit(str[index]); i++)
+                    {
+                        char digit = str[index++];
+                        val = (val << 4) | (isdigit(digit) ? digit - '0' : tolower(digit) - 'a' + 10);
+                    }
+                    return {.ch = (char) val, .type = tok::TOK_CHAR};
+                }
+                default:
+                    return {.ch = ch, .type = tok::TOK_CHAR};
                 }
             }
-            else
-            {
-                match(ch);
-                return char_regex(ch);
+                YIELD_TOK('(', tok::TOK_GROUP_OPEN);
+                YIELD_TOK(')', tok::TOK_GROUP_CLOSE);
+                YIELD_TOK('[', tok::TOK_CHAR_OPEN);
+                YIELD_TOK(']', tok::TOK_CHAR_CLOSE);
+                YIELD_TOK('+', tok::TOK_PLUS);
+                YIELD_TOK('.', tok::TOK_WILDCARD);
+                YIELD_TOK('*', tok::TOK_STAR);
+                YIELD_TOK('?', tok::TOK_OPT);
+                YIELD_TOK('|', tok::TOK_ALT);
+                YIELD_TOK('"', tok::TOK_STR);
+                YIELD_TOK('^', tok::TOK_NOT);
+                YIELD_TOK('-', tok::TOK_DASH);
+                YIELD_TOK('/', tok::TOK_DELIM);
+            default:
+                return {.ch = ch, .type = tok::TOK_CHAR};
             }
         }
-        else
-        {
-            char ch = peek();
-            if (ch != '|' && ch != ')' && ch != '*' && ch != '+' && ch != '?')
-            {
-                ++curr_pos;
-                return char_regex(ch);
-            }
-        }
-        return nullptr;
-    }
 
-    auto regex_parser::parse_char_class(const std::string& str, bool negate) -> regex
+    public:
+        regex_reader(const std::string& str) : str(str) { next(); }
+
+        auto next() -> tok
+        {
+            if (curr_token.type == tok::TOK_EOF)
+            {
+                throw regex_parse_error("unexpected end of regex");
+            }
+
+            auto res = curr_token;
+            curr_token = lex_tok();
+            return res;
+        }
+
+        [[nodiscard]] auto curr() const -> tok
+        {
+            if (curr_token.type == tok::TOK_EOF)
+            {
+                throw regex_parse_error("unexpected end of regex");
+            }
+
+            return curr_token;
+        }
+
+        [[nodiscard]] auto has() const -> bool { return curr_token.type != tok::TOK_EOF; }
+
+        template <typename... Args>
+        auto match(Args... args)
+        {
+            return (... || (args == curr().type));
+        }
+
+        template <typename... Args>
+        auto match_advance(Args... args)
+        {
+            return (... || (args == next().type));
+        }
+
+        auto get_remaining() -> std::string
+        {
+            if (index >= str.size())
+            {
+                return "";
+            }
+            return str.substr(index);
+        }
+    };
+
+    auto parse_char_class(regex_reader& reader) -> regex
     {
+        tok token{};
+        bool negate = false;
         auto current_charset = empty();
-        for (size_t i = 0; i < str.size(); i++)
+
+        if (reader.curr().type == tok::TOK_NOT)
         {
-            if (i + 1 < str.size() && str[i + 1] == '-')
+            reader.next();
+            negate = true;
+        }
+
+        while ((token = reader.next()).type != tok::TOK_CHAR_CLOSE)
+        {
+            // token = current token
+            // reader.curr() = next token
+            char_set new_chars;
+
+            switch (reader.curr().type)
             {
-                if (i + 2 == str.size())
-                {
-                    current_charset = current_charset || character(str[i + 1]);
-                    i++;
+                _case(tok::TOK_DASH, {
+                    reader.next();
+                    auto is_range = reader.curr().type != tok::TOK_CHAR_CLOSE;
+                    new_chars = is_range ? character_range(token.ch, reader.curr().ch) : character(token.ch) | character('-');
                     break;
-                }
+                });
+                _case(tok::TOK_CHARSET_ALPHA, new_chars = alphanumeric());
+                _case(tok::TOK_CHARSET_NOT_ALPHA, new_chars = ~alphanumeric());
+                _case(tok::TOK_CHARSET_DIGIT, new_chars = digit());
+                _case(tok::TOK_CHARSET_NOT_DIGIT, new_chars = ~digit());
+                _case(tok::TOK_CHARSET_WHITESPACE, new_chars = whitespace());
+                _case(tok::TOK_CHARSET_NOT_WHITESPACE, new_chars = ~whitespace());
+            default:
+                new_chars = character(token.ch);
+            }
 
-                current_charset = current_charset || character_range(str[i], str[i + 2]);
-                i += 2;
-            }
-            else
-            {
-                current_charset = current_charset || character(str[i]);
-            }
+            current_charset = current_charset | new_chars;
         }
 
-        return char_regex(negate ? !current_charset : current_charset);
+        return char_regex(negate ? ~current_charset : current_charset);
     }
 
-    // Parse an atom (character or capture group)
-    auto regex_parser::parse_atom() -> regex
+    auto parse_atom(regex_reader& reader) -> regex;
+
+    auto parse_quantifier(regex_reader& reader) -> regex
     {
-        if (match('['))
-        {
-            std::string chars;
-            bool negate = false;
-            if (match('^'))
-            {
-                negate = true;
-            }
-            while (!match(']'))
-            {
-                if (eof())
-                {
-                    error("unterminated character set");
-                    return nullptr;
-                }
-                if (match('\\'))
-                {
-                    chars += parse_escape();
-                }
-                else
-                {
-                    chars += next();
-                }
-            }
+        regex atom = parse_atom(reader);
+        regex (*wrapper)(const regex&) = nullptr;
 
-            return parse_char_class(chars, negate);
-        }
-        if (match('('))
+        switch (reader.curr().type)
         {
-            auto expr = parse_alt();
-            if (match(')'))
-            {
-                return expr;
-            }
-            return nullptr;
-        } 
-        if (match('.'))
-        {
-            return char_regex(!empty());
+            _case(tok::TOK_STAR, wrapper = star_regex);
+            _case(tok::TOK_PLUS, wrapper = plus_regex);
+            _case(tok::TOK_OPT, wrapper = optional_regex);
+        default:
+            break;
         }
 
-        return parse_char();
+        if (wrapper != nullptr)
+        {
+            reader.next();
+            return wrapper(atom);
+        }
+
+        return atom;
     }
 
-    auto regex_parser::next() -> char
+    auto parse_concat(regex_reader& reader)
     {
-        if (!eof())
+        auto base = parse_quantifier(reader);
+
+        while (reader.has() && !reader.match(tok::TOK_ALT, tok::TOK_GROUP_CLOSE, tok::TOK_DELIM))
         {
-            return curr_regex[curr_pos++];
+            base = base + parse_quantifier(reader);
         }
 
-        return '\0';
+        return base;
     }
 
-    auto regex_parser::parse_escape() -> std::string
+    auto parse_alt(regex_reader& reader)
     {
-        char ch = peek();
+        auto base = parse_concat(reader);
 
-        if (ch == 'n')
+        while (reader.has() && reader.match(tok::TOK_ALT))
         {
-            next();
-            return "\n";
+            reader.next();
+            base = base | parse_concat(reader);
         }
 
-        if (ch == '\\')
-        {
-            next();
-            return "\\";
-        }
-
-        if (ch == 'x')
-        {
-            next();
-            std::string hex;
-            for (int i = 0; i < 2; ++i)
-            {
-                char digit = next();
-                if (!isxdigit(digit))
-                {
-                    error("invalid hexadecimal escape");
-                    return "";
-                }
-                hex += digit;
-            }
-            return hex;
-        }
-
-        if (isdigit(ch))
-        {
-            std::string oct;
-            for (int i = 0; i < 3; ++i)
-            {
-                char digit = peek();
-                if (!isdigit(digit))
-                {
-                    break;
-                }
-                oct += next();
-            }
-            return oct;
-        }
-
-        next();
-        return std::string(1, ch);
+        return base;
     }
 
-    // Parse a character class (\w, \d, \s, etc.)
-    auto regex_parser::parse_class() -> regex
+    auto parse_group(regex_reader& reader) -> regex
     {
-        if (match('\\'))
+        auto alt = parse_alt(reader);
+        if (!reader.match_advance(tok::TOK_GROUP_CLOSE))
         {
-            char ch = peek();
-            if (ch == 'w' || ch == 'd' || ch == 's' || ch == 'W' || ch == 'D' || ch == 'S')
-            {
-                match(ch);
-                switch (ch)
-                {
-                case 'w':
-                    return char_regex(alphanumeric());
-                case 'W':
-                    return char_regex(!alphanumeric());
-                case 'd':
-                    return char_regex(digit());
-                case 'D':
-                    return char_regex(!digit());
-                case 's':
-                    return char_regex(whitespace());
-                case 'S':
-                    return char_regex(!whitespace());
-                }
-            }
+            throw regex_parse_error("unclosed group");
         }
-        return nullptr;
+
+        return alt;
     }
 
-    auto regex_parser::parse_capture() -> regex
+    auto parse_string(regex_reader& reader)
     {
-        if (match('('))
+        std::string str;
+        tok token{};
+        while ((token = reader.next()).type != tok::TOK_STR)
         {
-            regex expr = parse_alt();
-            if (match(')'))
-            {
-                return expr;
-            }
-            return nullptr;
+            str += token.ch;
         }
-        return nullptr;
+
+        return string_regex(std::move(str));
     }
 
-    auto regex_parser::parse_quantifier() -> regex
+    auto parse_atom(regex_reader& reader) -> regex
     {
-        regex atom = parse_atom();
-        if (atom)
+        auto token = reader.next();
+        switch (token.type)
         {
-            if (match('*'))
-            {
-                return star_regex(atom);
-            }
-            if (match('+'))
-            {
-                return plus_regex(atom);
-            }
-            if (match('?'))
-            {
-                return optional_regex(atom);
-            }
-            return atom;
+            _case(tok::TOK_CHAR_OPEN, return parse_char_class(reader));
+            _case(tok::TOK_CHARSET_ALPHA, return char_regex(alphanumeric()));
+            _case(tok::TOK_CHARSET_NOT_ALPHA, return char_regex(~alphanumeric()));
+            _case(tok::TOK_CHARSET_DIGIT, return char_regex(digit()));
+            _case(tok::TOK_CHARSET_NOT_DIGIT, return char_regex(~digit()));
+            _case(tok::TOK_CHARSET_WHITESPACE, return char_regex(whitespace()));
+            _case(tok::TOK_CHARSET_NOT_WHITESPACE, return char_regex(~whitespace()));
+            _case(tok::TOK_GROUP_OPEN, return parse_group(reader));
+            _case(tok::TOK_WILDCARD, return char_regex(~empty()));
+            _case(tok::TOK_STR, return parse_string(reader));
+        default:
+            return char_regex(token.ch);
         }
-        return nullptr;
     }
 
-    auto regex_parser::parse_concat() -> regex
+    auto parse(regex_reader& reader)
     {
-        regex left = parse_quantifier();
-        if (left)
+        // handle literal strings first
+        if (reader.match(tok::TOK_STR))
         {
-            while (!eof())
-            {
-                regex right = parse_quantifier();
-                if (right)
-                {
-                    left = left + right;
-                }
-                else
-                {
-                    break;
-                }
-            }
+            reader.next();
+            return parse_string(reader);
         }
-        return left;
-    }
 
-    auto regex_parser::parse_alt() -> regex
-    {
-        regex left = parse_concat();
-        if (left)
+        // handle actual regular expressions
+        if (!reader.match_advance(tok::TOK_DELIM))
         {
-            while (match('|'))
-            {
-                regex right = parse_concat();
-                if (right)
-                {
-                    left = left | right;
-                }
-                else
-                {
-                    break;
-                }
-            }
+            throw regex_parse_error("expected / at the start of regex");
         }
-        return left;
-    }
 
-    auto regex_parser::parse_name() -> std::string
-    {
-        std::string name;
-        while (!eof())
-        {
-            char ch = peek();
-            if (isalnum(ch) || ch == '_')
-            {
-                name += ch;
-                ++curr_pos;
-            }
-            else
-            {
-                break;
-            }
-        }
-        return name;
-    }
+        auto res = parse_alt(reader);
 
-    auto regex_parser::parse() -> regex
-    {
-        regex root = parse_alt();
-        if (!eof())
+        if (!reader.match_advance(tok::TOK_DELIM))
         {
-            return nullptr;
+            throw regex_parse_error("expected / at the end of regex");
         }
-        return root;
-    }
 
-    void regex_parser::dump_error()
-    {
-        for (const auto& error : errors)
-        {
-            std::cerr << error << '\n';
-        }
+        return res;
     }
-} // namespace lexergen
+} // namespace
+
+auto lexergen::parse_regex(const std::string& str) -> regex_parse_result
+{
+    regex_reader reader(str);
+
+    try
+    {
+        return {
+            .is_success = true,
+            .expr = parse(reader),
+            .rest = reader.get_remaining(),
+        };
+    }
+    catch (const regex_parse_error& parse_error)
+    {
+        return {
+            .is_success = false,
+            .error_msg = parse_error.what(),
+        };
+    }
+}

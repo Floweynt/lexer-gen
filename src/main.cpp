@@ -1,24 +1,16 @@
 #include "argparse.h"
-#include "fwd.h"
+#include "build_config.h"
+#include "machine/dfa.h"
+#include "machine/nfa.h"
+#include "regex.h"
 #include "utils.h"
-#include <bitset>
-#include <cinttypes>
 #include <cstdint>
-#include <fmt/core.h>
-#include <fmt/ranges.h>
+#include <cstdlib>
+#include <format>
 #include <fstream>
 #include <iostream>
-#include <list>
-#include <machine/dfa.h>
-#include <machine/nfa.h>
-#include <queue>
-#include <ranges>
-#include <regex.h>
 #include <span>
 #include <string>
-#include <string_view>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -35,21 +27,78 @@ namespace
 
         return buf;
     }
+
+    auto format_bitmask(std::vector<bool> bitset) -> std::string
+    {
+        std::string buf;
+        for (size_t i = 0; i < bitset.size(); i++)
+        {
+            if (bitset[i])
+            {
+                buf += std::to_string(i);
+                buf.push_back(',');
+            }
+        }
+        buf.pop_back();
+        return buf;
+    }
 } // namespace
 
 inline static constexpr lexergen::option options[] = {
-    {"dot-out", "--emit-dfa-dot", "-D", "specifies the output for the dot file for DFA graph visualization", true, false},
-    {"nfa-out", "--emit-nfa-dot", "-N", "specifies the output for the dot file for NFA graph visualization", true, false},
-    {"cpp-out", "--output", "-o", "specifies the output source file", true, true},
+    {
+        .name = "dot-out",
+        .long_flag = "--emit-dfa-dot",
+        .short_flag = "-D",
+        .description = "specifies the output for the dot file for DFA graph visualization",
+        .has_args = true,
+        .required = false,
+    },
+    {
+        .name = "nfa-out",
+        .long_flag = "--emit-nfa-dot",
+        .short_flag = "-N",
+        .description = "specifies the output for the dot file for NFA graph visualization",
+        .has_args = true,
+        .required = false,
+    },
+    {
+        .name = "cpp-out",
+        .long_flag = "--output",
+        .short_flag = "-o",
+        .description = "specifies the output source file",
+        .has_args = true,
+        .required = true,
+    },
     //    {"alignment", "--align", "-a", "specifies that equivalence classes should be padded to 2^n, or next 2^n if set to auto", true, false},
     //   {"type", "--type", "-t", "enables smallest int type selection", false, false},
-    {"debug", "--debug", "-d", "print some internal information", false, false},
-    {"equivalence-class", "--equivalence-class", "-c", "enables equivalence classes, which usually results in a DFA smaller table", false, false},
+    {
+        .name = "debug",
+        .long_flag = "--debug",
+        .short_flag = "-d",
+        .description = "print some internal information",
+        .has_args = false,
+        .required = false,
+    },
+    {
+        .name = "equivalence-class",
+        .long_flag = "--equivalence-class",
+        .short_flag = "-c",
+        .description = "enables equivalence classes, which usually results in a DFA smaller table",
+        .has_args = false,
+        .required = false,
+    },
 };
 
 auto main(int argc, const char* argv[]) -> int
 {
-    auto [files, args] = lexergen::parse_args(std::span<const char*>(argv + 1, argc - 1), lexergen::arg_spec{options, "lexer-gen", "v0.0.1"});
+    auto [files, args] = lexergen::parse_args(
+        std::span<const char*>(argv + 1, argc - 1),
+        lexergen::arg_spec{
+            .options = options,
+            .program_name = "lexer-gen",
+            .version = "v" VERSION,
+        }
+    );
 
     if (files.size() != 1)
     {
@@ -58,12 +107,23 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     std::ifstream in_file(files[0]);
+
+    // The file format is defined as:
+    // [preamble]
+    // %%
+    // RULE /expr/ [handler]
+    // UNKNOWN [handler]
+    // ERROR [handler]
+    // MACRO name /expr/
+    // CLASS [class]
+
     std::string preamble = get_str_section(in_file);
     std::string handle_error = get_str_section(in_file);
     std::string handle_internal_error = get_str_section(in_file);
     std::vector<std::pair<lexergen::regex, std::string>> tokens;
 
     std::string line;
+
     while (std::getline(in_file, line))
     {
         if (line == "%%")
@@ -76,27 +136,15 @@ auto main(int argc, const char* argv[]) -> int
             continue;
         }
 
-        auto index = line.find(" -> ");
-        std::string pattern = line.substr(0, index);
-        std::string handler = line.substr(index + 4);
-        lexergen::regex entry;
+        auto [success, expr, error_msg, rest] = lexergen::parse_regex(line);
 
-        if (pattern[0] == '"')
+        if (!success)
         {
-            entry = lexergen::string_regex(lexergen::handle_escape_str(pattern.substr(1, pattern.size() - 2)));
-        }
-        else
-        {
-            lexergen::regex_parser parser(pattern);
-            entry = parser.parse();
-            parser.dump_error();
-            if (parser.has_errors())
-            {
-                exit(-1);
-            }
+            std::cerr << std::format("failed to parse line `{}`: {}\n", line, error_msg);
+            exit(-1);
         }
 
-        tokens.emplace_back(entry, handler);
+        tokens.emplace_back(expr, rest);
     }
 
     std::string file_end = get_str_section(in_file);
@@ -142,7 +190,7 @@ auto main(int argc, const char* argv[]) -> int
 
     if (args["debug"].present)
     {
-        fmt::print("transition table (rle): ");
+        std::cout << std::format("transition table (rle): ");
         const auto& tab = res.transition;
         size_t rle_count = 0;
         auto rle_curr = tab[0];
@@ -151,7 +199,7 @@ auto main(int argc, const char* argv[]) -> int
         {
             if (ent != rle_curr)
             {
-                fmt::print("({}, {}), ", rle_curr, rle_count);
+                std::cout << std::format("({}, {}), ", rle_curr, rle_count);
                 rle_count = 1;
                 rle_curr = ent;
             }
@@ -160,17 +208,18 @@ auto main(int argc, const char* argv[]) -> int
                 rle_count++;
             }
         }
-        fmt::println("({}, {})", rle_curr, rle_count);
-        fmt::println("transition table takes: {} i64 = {} bytes", tab.size(), tab.size() * sizeof(int64_t));
-        fmt::println("start state: {}", dfa.get_start_state());
-        fmt::println("bitmask {}", fmt::join(dfa.get_end_bitmask() | std::ranges::views::transform([](bool flag) { return (int)flag; }), ""));
-        fmt::println("states {}", dfa.get_end_bitmask().size());
-        fmt::println("state mapping {}", dfa.get_end_to_nfa_state());
+
+        std::cout << std::format("({}, {})\n", rle_curr, rle_count);
+        std::cout << std::format("transition table takes: {} i64 = {} bytes\n", tab.size(), tab.size() * sizeof(int64_t));
+        std::cout << std::format("start state: {}\n", dfa.get_start_state());
+        std::cout << std::format("bitmask {}\n", format_bitmask(dfa.get_end_bitmask()));
+        std::cout << std::format("states {}\n", dfa.get_end_bitmask().size());
+        std::cout << std::format("state mapping {}\n", lexergen::format_table(dfa.get_end_to_nfa_state()));
 
         if (args["equivalence-class"].present)
         {
-            fmt::println("classifier: {}", res.classifier);
-            fmt::println("classes: {}", res.class_count);
+            std::cout << std::format("classifier: {}\n", lexergen::format_table(res.classifier));
+            std::cout << std::format("classes: {}\n", res.class_count);
         }
     }
 }

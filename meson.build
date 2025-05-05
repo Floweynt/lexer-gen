@@ -13,8 +13,7 @@ sources = [
   'src/dump.cpp',
   'src/lexergen.cpp',
   'src/regex.cpp',
-  'src/regex_parser.cpp',
-  'src/utils.cpp',
+  'src/regex_parser.cpp'
 ]
 
 include_dirs = [
@@ -23,9 +22,8 @@ include_dirs = [
 ]
 
 conf_data = configuration_data()
-conf_data.set('VERSION', meson.project_version())
-conf_data.set('MESON_CXX_COMPILER', meson.get_compiler('cpp').get_id())
-
+conf_data.set_quoted('VERSION', meson.project_version())
+conf_data.set_quoted('MESON_CXX_COMPILER', meson.get_compiler('cpp').get_id())
 configure_file(input: 'build_config.h.in', output: 'build_config.h', configuration: conf_data)
 
 lexer_gen = executable('lexer-gen', sources, 

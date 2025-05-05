@@ -1,304 +1,139 @@
 // cSpell:ignore pbytes pcol pline
+#include "machine/dfa.h"
+#include "fwd.h"
+#include "machine/cg.h"
 #include "utils.h"
-#include <fmt/ranges.h>
-#include <iostream>
-#include <machine/dfa.h>
-
-inline constexpr auto FMT_CODEGEN_REGULAR = R"(
-#include <deque>
-#include <istream>
-#include <vector>
+#include <cstddef>
 #include <cstdint>
-#include <string>
+#include <format>
+#include <functional>
 #include <iostream>
-
-{}
-
-// transition state tables
-static constexpr int64_t TRANSITION_TABLE[] = {{ {} }};
-static constexpr int64_t START_STATE = {};
-static constexpr bool END_BITMASK[] = {{ {} }};
-static constexpr int64_t END_TO_NFA_STATE[] = {{ {} }};
-
-static char peek(lex_context& ctx)
-{{
-    if (ctx.peek_index < ctx.buffer.size())
-        return ctx.buffer[ctx.peek_index++];
-    char ch = 0;
-    ctx.in.get(ch);
-
-    ctx.pbytes++;
-    ctx.pcol++;
-    if(ch == '\n')
-    {{
-        ctx.pline++;
-        ctx.pcol = 1;
-    }}
-
-    ctx.buffer.push_back(ch);
-    ctx.peek_index++;
-    return ch;
-}}
-
-static void reset(lex_context& ctx)
-{{
-    ctx.peek_index = 0;
-    /*ctx.pbytes = ctx.bytes;
-    ctx.pcol = ctx.col;
-    ctx.pline = ctx.line;*/
-}}
-
-static void seek_up(lex_context& ctx)
-{{
-    ctx.buffer.erase(ctx.buffer.begin(), ctx.buffer.begin() + ctx.peek_index);
-    ctx.peek_index = 0;
-    ctx.bytes = ctx.pbytes;
-    ctx.col = ctx.pcol;
-    ctx.line = ctx.pline;
-}}
-
-template <typename C>
-static void commit_to_buffer(C& output, lex_context& ctx)
-{{
-    output.insert(output.end(), ctx.buffer.begin(), ctx.buffer.begin() + ctx.peek_index);
-    seek_up(ctx);
-}}
-
-auto lex_tok(lex_context& ctx)
-{{
-    int64_t state = START_STATE;
-    int64_t latest_match = -1;
-    std::string buffer;
-
-    size_t start_line = ctx.line;
-    size_t start_col = ctx.col;
-    size_t start_bytes = ctx.bytes;
-
-    while (true)
-    {{
-        state = TRANSITION_TABLE[state * 256 + (uint8_t) peek(ctx)];
-        if (state != -1 && END_BITMASK[state])
-        {{
-            latest_match = state;
-            commit_to_buffer(buffer, ctx);
-        }}
-
-        if (state == -1)
-        {{
-            if (latest_match == -1)
-            {{
-                // report error
-                {}
-            }}
-
-            reset(ctx);
-            switch(END_TO_NFA_STATE[latest_match])
-            {{
-            {}
-            default: {{
-                {}
-            }}
-            }}
-
-            latest_match = -1;
-            state = START_STATE;
-            buffer.clear();
-
-            start_line = ctx.line;
-            start_col = ctx.col;
-            start_bytes = ctx.bytes;
-
-            continue;
-        }}
-    }}
-}})";
-
-inline constexpr auto FMT_CODEGEN_EQUIVALENCE_CLASS = R"(
-#include <deque>
-#include <istream>
+#include <span>
+#include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
-#include <cstdint>
-#include <string>
-#include <iostream>
 
-{}
-
-// transition state tables
-static constexpr int64_t TRANSITION_TABLE[] = {{ {} }};
-static constexpr int64_t START_STATE = {};
-static constexpr bool END_BITMASK[] = {{ {} }};
-static constexpr int64_t END_TO_NFA_STATE[] = {{ {} }};
-static constexpr uint8_t CLASSIFIER[256] = {{ {} }};
-static constexpr size_t CLASS_COUNT = {};
-
-static char peek(lex_context& ctx)
-{{
-    if (ctx.peek_index < ctx.buffer.size())
-        return ctx.buffer[ctx.peek_index++];
-    char ch = 0;
-    ctx.in.get(ch);
-
-    ctx.pbytes++;
-    ctx.pcol++;
-    if(ch == '\n')
-    {{
-        ctx.pline++;
-        ctx.pcol = 1;
-    }}
-
-    ctx.buffer.push_back(ch);
-    ctx.peek_index++;
-    return ch;
-}}
-
-static void reset(lex_context& ctx)
-{{
-    ctx.peek_index = 0;
-    /*ctx.pbytes = ctx.bytes;
-    ctx.pcol = ctx.col;
-    ctx.pline = ctx.line;*/
-}}
-
-static void seek_up(lex_context& ctx)
-{{
-    ctx.buffer.erase(ctx.buffer.begin(), ctx.buffer.begin() + ctx.peek_index);
-    ctx.peek_index = 0;
-    ctx.bytes = ctx.pbytes;
-    ctx.col = ctx.pcol;
-    ctx.line = ctx.pline;
-}}
-
-template <typename C>
-static void commit_to_buffer(C& output, lex_context& ctx)
-{{
-    output.insert(output.end(), ctx.buffer.begin(), ctx.buffer.begin() + ctx.peek_index);
-    seek_up(ctx);
-}}
-
-auto lex_tok(lex_context& ctx)
-{{
-    int64_t state = START_STATE;
-    int64_t latest_match = -1;
-    std::string buffer;
-
-    size_t start_line = ctx.line;
-    size_t start_col = ctx.col;
-    size_t start_bytes = ctx.bytes;
-
-    while (true)
-    {{
-        state = TRANSITION_TABLE[state * CLASS_COUNT + CLASSIFIER[(uint8_t) peek(ctx)]];
-        if (state != -1 && END_BITMASK[state])
-        {{
-            latest_match = state;
-            commit_to_buffer(buffer, ctx);
-        }}
-
-        if (state == -1)
-        {{
-            if (latest_match == -1)
-            {{
-                // report error
-                {}
-            }}
-
-            reset(ctx);
-            switch(END_TO_NFA_STATE[latest_match])
-            {{
-            {}
-            default:
-                {}
-            }}
-
-            latest_match = -1;
-            state = START_STATE;
-            buffer.clear();
-
-            start_line = ctx.line;
-            start_col = ctx.col;
-            start_bytes = ctx.bytes;
-        }}
-    }}
-}})";
-
-namespace lexergen
+struct equivalent_class_result
 {
-    void dfa::simulate(std::string_view buffer, auto callback) const
+    std::vector<uint8_t> classifier;
+    std::vector<int64_t> transition;
+    std::size_t class_count;
+};
+
+struct char_transition_info
+{
+    uint8_t ch;
+    std::span<const int64_t> transition;
+
+    constexpr auto operator==(const char_transition_info& rhs) const -> bool
     {
-        int64_t state = start_state;
-        int64_t latest_match = -1;
-        std::string match_buf;
-
-        for (int64_t index = 0; index < buffer.size(); index++)
+        for (size_t i = 0; i < transition.size() / lexergen::BYTE_MAX; i++)
         {
-            state = transition_table[state * BYTE_MAX + (uint8_t)buffer[index]];
-
-            if (state == -1)
+            if (transition[(i * lexergen::BYTE_MAX) + ch] != rhs.transition[(i * lexergen::BYTE_MAX) + rhs.ch])
             {
-                if (latest_match == -1)
-                {
-                    break;
-                }
-                callback(latest_match, match_buf);
-
-                // reset the state machine so we can process more information
-                latest_match = -1;
-                index--;
-                state = start_state;
-                match_buf.clear();
-                continue;
+                return false;
             }
-
-            if (end_bitmask[state])
-            {
-                latest_match = state;
-            }
-            match_buf += buffer[index];
         }
+
+        return true;
+    }
+};
+
+template <>
+struct std::hash<char_transition_info>
+{
+    auto operator()(const char_transition_info& info) const -> size_t
+    {
+        size_t ret = 0;
+        std::hash<size_t> hasher;
+
+        for (size_t i = 0; i < info.transition.size() / lexergen::BYTE_MAX; i++)
+        {
+            ret ^= hasher(info.transition[(i * lexergen::BYTE_MAX) + info.ch]) + 0x9e3779b9 + (ret << 6) + (ret >> 2);
+        }
+
+        return ret;
+    }
+};
+
+namespace
+{
+    auto build_equivalence_class(std::span<const int64_t> transition) -> equivalent_class_result
+    {
+        std::unordered_map<char_transition_info, uint8_t> classes;
+        size_t states = transition.size() / lexergen::BYTE_MAX;
+        std::vector<uint8_t> classifier(lexergen::BYTE_MAX);
+        for (size_t i = 0; i < lexergen::BYTE_MAX; i++)
+        {
+            char_transition_info inst = {.ch = static_cast<uint8_t>(i), .transition = transition};
+            if (!classes.contains(inst))
+            {
+                classes[inst] = classes.size();
+            }
+
+            classifier[i] = classes[inst];
+        }
+
+        std::vector<int64_t> equivalent_transition_table(classes.size() * states);
+        for (const auto& [equiv_candidate, class_id] : classes)
+        {
+            for (size_t state = 0; state < states; state++)
+            {
+                equivalent_transition_table[(state * classes.size()) + class_id] =
+                    transition[(state * lexergen::BYTE_MAX) + equiv_candidate.ch] == -1
+                        ? -1
+                        : transition[(state * lexergen::BYTE_MAX) + equiv_candidate.ch];
+            }
+        }
+
+        return {
+            .classifier = std::move(classifier),
+            .transition = std::move(equivalent_transition_table),
+            .class_count = classes.size(),
+        };
+    }
+} // namespace
+
+auto lexergen::dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class)
+    const -> codegen_result
+{
+    std::string switch_str;
+    for (const auto& handler : handler_map)
+    {
+        switch_str += std::format(R"(case {}: {})", handler.first, handler.second);
     }
 
-    auto dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class) const
-        -> equivalent_class_result
+    if (equivalence_class)
     {
-        std::string switch_str;
-        for (const auto& handler : handler_map)
+        auto [classifier, new_tab, classes] = build_equivalence_class(get_transition_table());
+
+        std::cout << std::format("found {} equivalence classes:\n", classes);
+
+        for (size_t i = 0; i < classes; i++)
         {
-            switch_str += fmt::format(R"(case {}: {})", handler.first, handler.second);
+            std::cout << std::format("class {}: {}\n", i, lexergen::format_string_class([classifier, i](uint8_t ch) { return classifier[ch] == i; }));
         }
-
-        if (equivalence_class)
-        {
-            auto [classifier, new_tab, classes] = build_equivalence_class(get_transition_table());
-
-            std::cout << fmt::format("found {} equivalence classes:\n", classes);
-
-            for (size_t i = 0; i < classes; i++)
-            {
-                std::cout << fmt::format("class {}: {}\n", i, lexergen::format_string_class([classifier, i](uint8_t ch) {
-                                             return classifier[ch] == i;
-                                         }));
-            }
-            out << fmt::format(
-                FMT_CODEGEN_EQUIVALENCE_CLASS, inc, fmt::join(new_tab, ","), start_state, fmt::join(end_bitmask, ","),
-                fmt::join(end_to_nfa_state, ","), fmt::join(classifier, ","), classes, handle_error, switch_str, handle_internal_error
-            );
-
-            return {
-                std::move(classifier),
-                std::move(new_tab),
-                classes,
-            };
-        }
-
-        out << fmt::format(
-            FMT_CODEGEN_REGULAR, inc, fmt::join(transition_table, ","), start_state, fmt::join(end_bitmask, ","), fmt::join(end_to_nfa_state, ","),
-            handle_error, switch_str, handle_internal_error
+        out << std::format(
+            FMT_CODEGEN_EQUIVALENCE_CLASS, inc, format_table(new_tab), start_state, format_table(end_bitmask), format_table(end_to_nfa_state),
+            format_table(classifier), classes, handle_error, switch_str, handle_internal_error
         );
 
         return {
-            {},
-            transition_table,
-            0,
+            .classifier = std::move(classifier),
+            .transition = std::move(new_tab),
+            .class_count = classes,
         };
     }
-} // namespace lexergen
+
+    out << std::format(
+        FMT_CODEGEN_REGULAR, inc, format_table(transition_table), start_state, format_table(end_bitmask), format_table(end_to_nfa_state),
+        handle_error, switch_str, handle_internal_error
+    );
+
+    return {
+        .classifier = {},
+        .transition = transition_table,
+        .class_count = 0,
+    };
+}

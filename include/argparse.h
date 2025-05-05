@@ -1,8 +1,7 @@
 #pragma once
 
-#include <fmt/core.h>
-#include <iostream>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -36,12 +35,6 @@ namespace lexergen
     {
         std::vector<std::string> input_values;
         std::unordered_map<std::string, argument_value> values;
-    };
-
-    inline static constexpr option options[] = {
-        {"dot-out", "--emit-dfa-dot", "-D", "specifies the output for the dot file for DFA graph visualization", true, false},
-        {"nfa-out", "--emit-nfa-dot", "-N", "specifies the output for the dot file for NFA graph visualization", true, false},
-        {"cpp-out", "--output", "-o", "specifies the output source file", true, true},
     };
 
     void make_help_msg(const arg_spec& options);

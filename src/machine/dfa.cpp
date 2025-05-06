@@ -2,15 +2,20 @@
 #include "machine/dfa.h"
 #include "fwd.h"
 #include "machine/cg.h"
+#include "machine/data.h"
 #include "utils.h"
 #include <cstddef>
 #include <cstdint>
+#include <execution>
 #include <format>
 #include <functional>
 #include <iostream>
+#include <queue>
+#include <set>
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -57,6 +62,23 @@ struct std::hash<char_transition_info>
     }
 };
 
+template <>
+struct std::hash<lexergen::state_set>
+{
+    auto operator()(const lexergen::state_set& info) const -> size_t
+    {
+        size_t ret = 0;
+        std::hash<size_t> hasher;
+
+        for (auto state : info)
+        {
+            ret ^= hasher(state) + 0x9e3779b9 + (ret << 6) + (ret >> 2);
+        }
+
+        return ret;
+    }
+};
+
 namespace
 {
     auto build_equivalence_class(std::span<const int64_t> transition) -> equivalent_class_result
@@ -93,7 +115,130 @@ namespace
             .class_count = classes.size(),
         };
     }
+
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    auto partition_set(const lexergen::state_set& left, const lexergen::state_set& right) -> std::pair<lexergen::state_set, lexergen::state_set>
+    {
+        // compute intersection
+        lexergen::state_set intersection;
+        lexergen::state_set left_only;
+
+        for (auto state : left)
+        {
+            if (right.contains(state))
+            {
+                intersection.insert(state);
+            }
+            else
+            {
+                left_only.insert(state);
+            }
+        }
+
+        return std::make_pair(intersection, left_only);
+    }
 } // namespace
+
+auto lexergen::dfa::source_states(size_t ch, const state_set& target) -> lexergen::state_set
+{
+    state_set split;
+    for (int64_t state = 0; state < transition_table.size() / BYTE_MAX; state++)
+    {
+        if (target.contains(transition_table[(state * BYTE_MAX) + ch]))
+        {
+            split.insert(state);
+        }
+    }
+
+    return split;
+}
+
+auto lexergen::dfa::hopcroft(const std::unordered_set<state_set>& initial) -> std::vector<lexergen::state_set>
+{
+    // hopcroft sucks, i don't understand actual CS sorry
+    auto queue = initial;
+    auto partitions = initial;
+
+    while (!queue.empty())
+    {
+        // take a from w
+        auto curr = *queue.begin();
+        queue.erase(queue.begin());
+
+        for (size_t ch = 0; ch < BYTE_MAX; ch++)
+        {
+            // let X be the set of states for which a transition on c leads to a state in A
+            state_set split = source_states(ch, curr);
+
+            // copy here
+            for (const auto& partition : std::vector(partitions.begin(), partitions.end()))
+            {
+                auto [intersection, y_only] = partition_set(partition, split);
+                if (intersection.empty() || y_only.empty())
+                {
+                    continue;
+                }
+
+                partitions.erase(partition);
+                partitions.insert(intersection);
+                partitions.insert(y_only);
+
+                if (queue.contains(partition))
+                {
+                    queue.erase(partition);
+                    queue.insert(intersection);
+                    queue.insert(y_only);
+                }
+                else
+                {
+                    queue.insert(intersection.size() <= y_only.size() ? intersection : y_only);
+                }
+            }
+        }
+    }
+
+    return std::vector(partitions.begin(), partitions.end());
+}
+
+void lexergen::dfa::optimize(bool debug)
+{
+    state_set nonfinal_states;
+    std::unordered_map<int64_t, state_set> nfa_to_end_state;
+
+    for (int64_t state = 0; state < transition_table.size() / BYTE_MAX; state++)
+    {
+        if (!end_bitmask[state])
+        {
+            nonfinal_states.insert(state);
+        }
+        else
+        {
+            nfa_to_end_state[end_to_nfa_state[state]].insert(state);
+        }
+    }
+
+    std::unordered_set<state_set> initial{nonfinal_states};
+
+    for (const auto& [nfa, dfa] : nfa_to_end_state)
+    {
+        if (nfa != -1)
+        {
+            initial.insert(dfa);
+        }
+    }
+
+    auto partitions = hopcroft(initial);
+
+    if (debug)
+    {
+        std::cout << "State equivalence classes:\n";
+
+        for (const auto& partition : partitions)
+        {
+            std::cout << format_table(partition) << "\n";
+        }
+    }
+}
 
 auto lexergen::dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class)
     const -> codegen_result

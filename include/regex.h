@@ -42,7 +42,7 @@ namespace lexergen
     auto xdigit() -> char_set;
 
     auto char_regex(char_set charset) -> regex;
-    auto string_regex( std::string str) -> regex;
+    auto string_regex(std::string str) -> regex;
     auto star_regex(const regex& regexp) -> regex;
     auto operator+(const regex& lhs, const regex& rhs) -> regex;
     auto plus_regex(const regex& regexp) -> regex;

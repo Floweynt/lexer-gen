@@ -76,8 +76,7 @@ namespace lexergen
         return out;
     }
 
-    template <typename T>
-    constexpr auto format_table(const std::vector<T>& vec) -> std::string
+    constexpr auto format_table(const auto& vec) -> std::string
     {
         std::string buf;
         for (auto ent : vec)

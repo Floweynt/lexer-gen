@@ -1,5 +1,6 @@
 #include "machine/nfa.h"
 #include "fwd.h"
+#include "machine/data.h"
 #include <algorithm>
 #include <cstdint>
 #include <format>
@@ -41,8 +42,8 @@ auto lexergen::nfa_builder::build() -> dfa
     std::list<entry> output_edges;
     std::unordered_map<std::vector<bool>, int64_t> subset_to_id;
     int64_t curr_node_id = 0;
-    std::vector<std::unordered_set<int64_t>> transition_table(nodes * BYTE_MAX);
-    std::vector<std::unordered_set<int64_t>> epsilon_table(nodes);
+    std::vector<state_set> transition_table(nodes * BYTE_MAX);
+    std::vector<state_set> epsilon_table(nodes);
     std::vector<bool> start_bitset(nodes);
     std::vector<bool> tmp_state_set(nodes);
     std::queue<std::vector<bool>> nodes_to_process;

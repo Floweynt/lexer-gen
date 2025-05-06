@@ -46,7 +46,7 @@ namespace
 
 inline static constexpr lexergen::option options[] = {
     {
-        .name = "dot-out",
+        .name = "dfa-out",
         .long_flag = "--emit-dfa-dot",
         .short_flag = "-D",
         .description = "specifies the output for the dot file for DFA graph visualization",
@@ -84,6 +84,14 @@ inline static constexpr lexergen::option options[] = {
         .long_flag = "--equivalence-class",
         .short_flag = "-c",
         .description = "enables equivalence classes, which usually results in a DFA smaller table",
+        .has_args = false,
+        .required = false,
+    },
+    {
+        .name = "optimize",
+        .long_flag = "--optimize",
+        .short_flag = "-O",
+        .description = "enables DFA optimization via minimization",
         .has_args = false,
         .required = false,
     },
@@ -164,12 +172,17 @@ auto main(int argc, const char* argv[]) -> int
         out << file_end;
     }
 
-    if (args["dot-out"].present)
+    if (args["optimize"].present)
     {
-        std::ofstream dot_out(args["dot-out"].value);
+        dfa.optimize(args["debug"].present);
+    }
+
+    if (args["dfa-out"].present)
+    {
+        std::ofstream dot_out(args["dfa-out"].value);
         if (!dot_out)
         {
-            std::cerr << "unable to open file: " << args["dot-out"].value << '\n';
+            std::cerr << "unable to open file: " << args["dfa-out"].value << '\n';
             exit(-1);
         }
 

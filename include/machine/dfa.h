@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fwd.h"
+#include "machine/data.h"
 #include "regex.h"
 #include <cstddef>
 #include <cstdint>
@@ -34,7 +35,10 @@ namespace lexergen
 
         dfa(int64_t states) : transition_table(states * BYTE_MAX, -1), end_bitmask(states), end_to_nfa_state(states, -1) {}
 
+        auto source_states(size_t ch, const state_set& target) -> state_set;
+        auto hopcroft( const std::unordered_set<state_set>& initial) -> std::vector<state_set>;
     public:
+        void optimize(bool debug);
         auto codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class) const
             -> codegen_result;
         void dump(std::ostream& ofs);

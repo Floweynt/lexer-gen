@@ -165,16 +165,17 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     auto [dfa, nfa] = lexergen::make_lexer(tokens);
+
+    if (args["optimize"].present)
+    {
+        dfa.optimize(args["debug"].present);
+    }
+
     auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, args["equivalence-class"].present);
 
     if (!file_end.empty())
     {
         out << file_end;
-    }
-
-    if (args["optimize"].present)
-    {
-        dfa.optimize(args["debug"].present);
     }
 
     if (args["dfa-out"].present)

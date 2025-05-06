@@ -8,6 +8,7 @@
 #include <ostream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -36,7 +37,9 @@ namespace lexergen
         dfa(int64_t states) : transition_table(states * BYTE_MAX, -1), end_bitmask(states), end_to_nfa_state(states, -1) {}
 
         auto source_states(size_t ch, const state_set& target) -> state_set;
-        auto hopcroft( const std::unordered_set<state_set>& initial) -> std::vector<state_set>;
+        auto hopcroft(const std::unordered_set<state_set>& initial) -> std::vector<state_set>;
+        void reconstruct(const std::vector<state_set>& partitions);
+
     public:
         void optimize(bool debug);
         auto codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class) const
@@ -47,5 +50,6 @@ namespace lexergen
         constexpr auto get_start_state() const -> const auto& { return start_state; }
         constexpr auto get_end_bitmask() const -> const auto& { return end_bitmask; }
         constexpr auto get_end_to_nfa_state() const -> const auto& { return end_to_nfa_state; }
+        constexpr auto get_state_count() const -> auto { return transition_table.size() / BYTE_MAX; }
     };
 } // namespace lexergen

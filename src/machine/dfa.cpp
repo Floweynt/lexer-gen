@@ -142,7 +142,7 @@ namespace
 auto lexergen::dfa::source_states(size_t ch, const state_set& target) -> lexergen::state_set
 {
     state_set split;
-    for (int64_t state = 0; state < transition_table.size() / BYTE_MAX; state++)
+    for (int64_t state = 0; state < get_state_count(); state++)
     {
         if (target.contains(transition_table[(state * BYTE_MAX) + ch]))
         {
@@ -200,12 +200,59 @@ auto lexergen::dfa::hopcroft(const std::unordered_set<state_set>& initial) -> st
     return std::vector(partitions.begin(), partitions.end());
 }
 
+auto lexergen::dfa::reconstruct(const std::vector<state_set>& partitions) -> void
+{
+    std::vector<int64_t> old_to_new(get_state_count());
+    std::vector<int64_t> new_to_old(partitions.size());
+
+    int64_t curr_id = 0;
+
+    for (const auto& partition : partitions)
+    {
+        const auto partition_id = curr_id++;
+        for (auto state : partition)
+        {
+            new_to_old[partition_id] = state;
+            old_to_new[state] = partition_id;
+        }
+    }
+
+    // remap all of the DFA
+    std::vector<int64_t> new_transition_table(curr_id * BYTE_MAX);
+
+    for (int64_t new_state = 0; new_state < curr_id; new_state++)
+    {
+        for (size_t ch = 0; ch < BYTE_MAX; ch++)
+        {
+            auto old_state = transition_table[(new_to_old[new_state] * BYTE_MAX) + ch];
+            new_transition_table[(new_state * BYTE_MAX) + ch] = old_state == -1 ? -1 : old_to_new[old_state];
+        }
+    }
+
+    std::vector<bool> new_end_bitmask(curr_id);
+    for (int64_t new_state = 0; new_state < curr_id; new_state++)
+    {
+        new_end_bitmask[new_state] = end_bitmask[new_to_old[new_state]];
+    }
+
+    std::vector<int64_t> new_end_to_nfa_state(curr_id);
+    for (int64_t new_state = 0; new_state < curr_id; new_state++)
+    {
+        new_end_to_nfa_state[new_state] = end_to_nfa_state[new_to_old[new_state]];
+    }
+
+    transition_table = new_transition_table;
+    start_state = old_to_new[start_state];
+    end_bitmask = new_end_bitmask;
+    end_to_nfa_state = new_end_to_nfa_state;
+}
+
 void lexergen::dfa::optimize(bool debug)
 {
     state_set nonfinal_states;
     std::unordered_map<int64_t, state_set> nfa_to_end_state;
 
-    for (int64_t state = 0; state < transition_table.size() / BYTE_MAX; state++)
+    for (int64_t state = 0; state < get_state_count(); state++)
     {
         if (!end_bitmask[state])
         {
@@ -238,6 +285,8 @@ void lexergen::dfa::optimize(bool debug)
             std::cout << format_table(partition) << "\n";
         }
     }
+
+    reconstruct(partitions);
 }
 
 auto lexergen::dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class)

@@ -3,8 +3,6 @@ project('lexer-gen', 'cpp',
   version: '1.0.0'
 )
 
-fmt_dep = dependency('fmt')
-
 sources = [
   'src/main.cpp',
   'src/machine/dfa.cpp',
@@ -27,8 +25,8 @@ conf_data.set_quoted('MESON_CXX_COMPILER', meson.get_compiler('cpp').get_id())
 configure_file(input: 'build_config.h.in', output: 'build_config.h', configuration: conf_data)
 
 lexer_gen = executable('lexer-gen', sources, 
-  dependencies: [fmt_dep],
-  cpp_pch: 'pch/pch.h', 
-  cpp_args : '-DFMT_HEADER_ONLY', 
-  include_directories: include_directories(include_dirs),
+    dependencies: [],
+    cpp_pch: 'pch/pch.h', 
+    cpp_args : '-DFMT_HEADER_ONLY', 
+    include_directories: include_directories(include_dirs),
 )

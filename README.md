@@ -1,6 +1,6 @@
 # Lexer gen
 
-Simple modern `c++14` (or later) lexer generator. 
+Simple modern `c++20` (or later) lexer generator. 
 
 ## Example 
 

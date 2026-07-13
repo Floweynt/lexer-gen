@@ -30,9 +30,7 @@ namespace lexergen
         template <std::convertible_to<char>... Args>
             requires(sizeof...(Args) > 1)
         constexpr auto transition(int64_t source, int64_t target, Args... val) -> nfa_builder&
-        {
-            return transition(source, target, {((char)val)...});
-        }
+        { return transition(source, target, {((char)val)...}); }
 
         constexpr auto transition(int64_t source, int64_t target, const std::vector<char>& transition_list) -> nfa_builder&
         {

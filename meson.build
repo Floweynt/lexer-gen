@@ -24,9 +24,8 @@ conf_data.set_quoted('VERSION', meson.project_version())
 conf_data.set_quoted('MESON_CXX_COMPILER', meson.get_compiler('cpp').get_id())
 configure_file(input: 'build_config.h.in', output: 'build_config.h', configuration: conf_data)
 
-lexer_gen = executable('lexer-gen', sources, 
+lexer_gen = executable('lexer-gen', sources,
     dependencies: [],
-    cpp_pch: 'pch/pch.h', 
-    cpp_args : '-DFMT_HEADER_ONLY', 
+    cpp_pch: 'pch/pch.h',
     include_directories: include_directories(include_dirs),
 )

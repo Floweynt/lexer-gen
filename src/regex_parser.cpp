@@ -113,7 +113,7 @@ namespace
                     {
                         val = (val << 3) | (str[index++] - '0');
                     }
-                    return {.ch = (char) val, .type = tok::TOK_CHAR};
+                    return {.ch = (char)val, .type = tok::TOK_CHAR};
                 }
                 case 'x': { // Handle hexadecimal escape sequence
                     int val = 0;
@@ -122,7 +122,7 @@ namespace
                         char digit = str[index++];
                         val = (val << 4) | (isdigit(digit) ? digit - '0' : tolower(digit) - 'a' + 10);
                     }
-                    return {.ch = (char) val, .type = tok::TOK_CHAR};
+                    return {.ch = (char)val, .type = tok::TOK_CHAR};
                 }
                 default:
                     return {.ch = ch, .type = tok::TOK_CHAR};
@@ -175,15 +175,11 @@ namespace
 
         template <typename... Args>
         auto match(Args... args)
-        {
-            return (... || (args == curr().type));
-        }
+        { return (... || (args == curr().type)); }
 
         template <typename... Args>
         auto match_advance(Args... args)
-        {
-            return (... || (args == next().type));
-        }
+        { return (... || (args == next().type)); }
 
         auto get_remaining() -> std::string
         {

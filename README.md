@@ -9,12 +9,13 @@ To start, you need to create a file that describes the lexer, which is broken up
 // Will be pasted at the top of the generated lexer; do includes here
 #include <string>
 #include <variant>
-#include <fmt/core.h>
+#include <format>
+#include <iostream>
 #include "lexer.h"
-#define _curr {start_line, start_col, start_bytes}, {ctx.line, ctx.col, ctx.bytes}
+#define _curr {start_line, start_col, start_bytes}, {src.line(), src.col(), src.bytes()}
 %%
 // Token lex fail reporting
-ctx.ctx.report_error({ctx.line, ctx.col, ctx.bytes}, "unknown token: failed to parse token"); 
+ctx.report_error({src.line(), src.col(), src.bytes()}, "unknown token: failed to parse token");
 throw lexer_error();
 %%
 throw std::runtime_error("internal lexer error");
@@ -28,7 +29,7 @@ throw std::runtime_error("internal lexer error");
 "\0" return token({0, 0, 0}, {0, 0, 0}, token::TOK_EOF);
 
 # identifiers 
-/[a-zA-Z_]\w*/ return from_identifier(ctx.ctx, _curr, buffer);
+/[a-zA-Z_]\w*/ return from_identifier(ctx, _curr, buffer);
 
 # match integers
 \d+ return integer_to_token(_curr, buffer);
@@ -44,39 +45,43 @@ throw std::runtime_error("internal lexer error");
 ")" return token(_curr, token::TOK_PAREN_CLOSE);
 ```
 
-In this example, a type called `token` is defined in `lexer.h`. 
-In `lexer.h`, you must define a type:
-```cpp
-struct lex_context
-{
-    std::istream& in;
-    std::deque<char> buffer;
-    size_t peek_index;
+In this example, `token` and `lexer_error` are defined in `lexer.h`, along with any
+application state you want your rule actions to see.
 
-    size_t bytes, col, line;
-    size_t pbytes, pcol, pline;
-};
+The generator emits:
+```cpp
+template <typename Source, typename Ctx>
+auto lex_tok(Source& src, Ctx& ctx);
 ```
 
-In turn, the lexer generator will create a function:
-```cpp
-auto lex_tok(lex_context& ctx);
-```
+`Source` supplies raw bytes and tracks position/backtracking; `Ctx` is your own state,
+passed through untouched. Generated output is dependency-free; copy a `Source` into
+your preamble:
+- `snippets/stream_source.hpp` - for `std::istream`
+- `snippets/span_source.hpp` - pointer-pair over an in-memory buffer, zero-copy
+
+Or write your own. A `Source` must provide:
+| method | purpose |
+|---|---|
+| `uint8_t peek()` | consume and return the next lookahead byte, `0` forever at EOF |
+| `void accept()` | commit everything scanned so far as part of the current token |
+| `void backtrack()` | rewind lookahead back to the last `accept()` |
+| `void start_token()` | called when a new token starts scanning |
+| `text() const` | bytes from `start_token()` to the last `accept()` (string-view-like) |
+| `line() / col() / bytes() const` | position as of the last `accept()` |
 
 Make sure that all rules (EOF and user defined) return the same type.
 
-To generate source, run: 
+To generate source, run:
 
 ```bash 
 lexer-gen lexer.leg -o lexer_impl.cpp
 ```
 
-Optionally add the `-c` flag to enable equivalence classes.
-
 More examples can be found under the `examples` directory.
 
 ## Building 
-Make sure you have `fmt` and `meson` installed, as well as a `c++20` compatible compiler.
+Make sure you have `meson` installed, as well as a `c++20` (or later) compatible compiler with `<format>` support.
 
 Run:
 ```bash
@@ -91,16 +96,11 @@ It is possible to dump the internal NFA (generated from the regular expressions)
 - `-D` - dump DFA
 - `-N` - dump NFA
 
-## Advanced usage 
-
-
-
 ## TODO 
-- Support for other languages like `c`, `js`, `java`, etc
-- Better regular expression parsing (implement macros to reduce code duplication, with syntax like `{macro_name}`)
+- Unicode support
+- Other target languages (`c`, `js`, `java`, etc.)
+- Better regular expression parsing (macros, e.g. `{macro_name}`)
 - Better lexer specification parsing in general
-- Compact tables by using smaller bit-width types whenever possible 
-- Table padding and alignment
 - Actually release the tree-sitter grammar
 - Parser generator
 

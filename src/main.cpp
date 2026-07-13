@@ -80,14 +80,6 @@ inline static constexpr lexergen::option options[] = {
         .required = false,
     },
     {
-        .name = "equivalence-class",
-        .long_flag = "--equivalence-class",
-        .short_flag = "-c",
-        .description = "enables equivalence classes, which usually results in a DFA smaller table",
-        .has_args = false,
-        .required = false,
-    },
-    {
         .name = "optimize",
         .long_flag = "--optimize",
         .short_flag = "-O",
@@ -99,14 +91,13 @@ inline static constexpr lexergen::option options[] = {
 
 auto main(int argc, const char* argv[]) -> int
 {
-    auto [files, args] = lexergen::parse_args(
-        std::span<const char*>(argv + 1, argc - 1),
-        lexergen::arg_spec{
-            .options = options,
-            .program_name = "lexer-gen",
-            .version = "v" VERSION,
-        }
-    );
+    auto spec = lexergen::arg_spec{
+        .options = options,
+        .program_name = "lexer-gen",
+        .version = "v" VERSION,
+    };
+
+    auto [files, args] = lexergen::parse_args(std::span<const char*>(argv + 1, argc - 1), spec);
 
     if (files.size() != 1)
     {
@@ -171,7 +162,7 @@ auto main(int argc, const char* argv[]) -> int
         dfa.optimize(args["debug"].present);
     }
 
-    auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, args["equivalence-class"].present);
+    auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error);
 
     if (!file_end.empty())
     {
@@ -204,36 +195,10 @@ auto main(int argc, const char* argv[]) -> int
 
     if (args["debug"].present)
     {
-        std::cout << std::format("transition table (rle): ");
-        const auto& tab = res.transition;
-        size_t rle_count = 0;
-        auto rle_curr = tab[0];
-
-        for (auto ent : tab)
-        {
-            if (ent != rle_curr)
-            {
-                std::cout << std::format("({}, {}), ", rle_curr, rle_count);
-                rle_count = 1;
-                rle_curr = ent;
-            }
-            else
-            {
-                rle_count++;
-            }
-        }
-
-        std::cout << std::format("({}, {})\n", rle_curr, rle_count);
-        std::cout << std::format("transition table takes: {} i64 = {} bytes\n", tab.size(), tab.size() * sizeof(int64_t));
         std::cout << std::format("start state: {}\n", dfa.get_start_state());
         std::cout << std::format("bitmask {}\n", format_bitmask(dfa.get_end_bitmask()));
         std::cout << std::format("states {}\n", dfa.get_end_bitmask().size());
         std::cout << std::format("state mapping {}\n", lexergen::format_table(dfa.get_end_to_nfa_state()));
-
-        if (args["equivalence-class"].present)
-        {
-            std::cout << std::format("classifier: {}\n", lexergen::format_table(res.classifier));
-            std::cout << std::format("classes: {}\n", res.class_count);
-        }
+        std::cout << std::format("emitted states: {}, emitted case labels: {}\n", res.state_count, res.case_count);
     }
 }

@@ -18,9 +18,8 @@ namespace lexergen
 
     struct codegen_result
     {
-        std::vector<uint8_t> classifier;
-        std::vector<int64_t> transition;
-        std::size_t class_count;
+        std::size_t state_count;
+        std::size_t case_count;
     };
 
     class dfa
@@ -42,8 +41,7 @@ namespace lexergen
 
     public:
         void optimize(bool debug);
-        auto codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class) const
-            -> codegen_result;
+        auto codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error) const -> codegen_result;
         void dump(std::ostream& ofs);
 
         constexpr auto get_transition_table() const -> const auto& { return transition_table; }

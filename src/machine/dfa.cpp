@@ -19,49 +19,6 @@
 #include <utility>
 #include <vector>
 
-struct equivalent_class_result
-{
-    std::vector<uint8_t> classifier;
-    std::vector<int64_t> transition;
-    std::size_t class_count;
-};
-
-struct char_transition_info
-{
-    uint8_t ch;
-    std::span<const int64_t> transition;
-
-    constexpr auto operator==(const char_transition_info& rhs) const -> bool
-    {
-        for (size_t i = 0; i < transition.size() / lexergen::BYTE_MAX; i++)
-        {
-            if (transition[(i * lexergen::BYTE_MAX) + ch] != rhs.transition[(i * lexergen::BYTE_MAX) + rhs.ch])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-};
-
-template <>
-struct std::hash<char_transition_info>
-{
-    auto operator()(const char_transition_info& info) const -> size_t
-    {
-        size_t ret = 0;
-        std::hash<size_t> hasher;
-
-        for (size_t i = 0; i < info.transition.size() / lexergen::BYTE_MAX; i++)
-        {
-            ret ^= hasher(info.transition[(i * lexergen::BYTE_MAX) + info.ch]) + 0x9e3779b9 + (ret << 6) + (ret >> 2);
-        }
-
-        return ret;
-    }
-};
-
 template <>
 struct std::hash<lexergen::state_set>
 {
@@ -81,41 +38,6 @@ struct std::hash<lexergen::state_set>
 
 namespace
 {
-    auto build_equivalence_class(std::span<const int64_t> transition) -> equivalent_class_result
-    {
-        std::unordered_map<char_transition_info, uint8_t> classes;
-        size_t states = transition.size() / lexergen::BYTE_MAX;
-        std::vector<uint8_t> classifier(lexergen::BYTE_MAX);
-        for (size_t i = 0; i < lexergen::BYTE_MAX; i++)
-        {
-            char_transition_info inst = {.ch = static_cast<uint8_t>(i), .transition = transition};
-            if (!classes.contains(inst))
-            {
-                classes[inst] = classes.size();
-            }
-
-            classifier[i] = classes[inst];
-        }
-
-        std::vector<int64_t> equivalent_transition_table(classes.size() * states);
-        for (const auto& [equiv_candidate, class_id] : classes)
-        {
-            for (size_t state = 0; state < states; state++)
-            {
-                equivalent_transition_table[(state * classes.size()) + class_id] =
-                    transition[(state * lexergen::BYTE_MAX) + equiv_candidate.ch] == -1
-                        ? -1
-                        : transition[(state * lexergen::BYTE_MAX) + equiv_candidate.ch];
-            }
-        }
-
-        return {
-            .classifier = std::move(classifier),
-            .transition = std::move(equivalent_transition_table),
-            .class_count = classes.size(),
-        };
-    }
-
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
     auto partition_set(const lexergen::state_set& left, const lexergen::state_set& right) -> std::pair<lexergen::state_set, lexergen::state_set>
     {
@@ -289,45 +211,88 @@ void lexergen::dfa::optimize(bool debug)
     reconstruct(partitions);
 }
 
-auto lexergen::dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error, bool equivalence_class)
-    const -> codegen_result
+auto lexergen::dfa::codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error) const -> codegen_result
 {
-    std::string switch_str;
-    for (const auto& handler : handler_map)
+    const auto states = get_state_count();
+
+    out << FMT_INCLUDES << "\n" << inc << "\n\n";
+    out << "template <typename Source, typename Ctx>\n";
+    out << "auto lex_tok(Source& src, Ctx& ctx)\n{\n";
+    out << "    (void)ctx;\n";
+    out << "    int64_t latest_match = -1;\n\n";
+    out << "    src.start_token();\n";
+    out << "    [[maybe_unused]] std::size_t start_line = src.line();\n";
+    out << "    [[maybe_unused]] std::size_t start_col = src.col();\n";
+    out << "    [[maybe_unused]] std::size_t start_bytes = src.bytes();\n\n";
+    out << std::format("    goto STATE_{};\n\n", start_state);
+
+    std::size_t total_cases = 0;
+
+    for (int64_t s = 0; s < static_cast<int64_t>(states); s++)
     {
-        switch_str += std::format(R"(case {}: {})", handler.first, handler.second);
-    }
+        out << std::format("STATE_{}:\n", s);
 
-    if (equivalence_class)
-    {
-        auto [classifier, new_tab, classes] = build_equivalence_class(get_transition_table());
-
-        std::cout << std::format("found {} equivalence classes:\n", classes);
-
-        for (size_t i = 0; i < classes; i++)
+        if (end_bitmask[s])
         {
-            std::cout << std::format("class {}: {}\n", i, lexergen::format_string_class([classifier, i](uint8_t ch) { return classifier[ch] == i; }));
+            out << std::format("    latest_match = {};\n    src.accept();\n", end_to_nfa_state[s]);
         }
-        out << std::format(
-            FMT_CODEGEN_EQUIVALENCE_CLASS, inc, format_table(new_tab), start_state, format_table(end_bitmask), format_table(end_to_nfa_state),
-            format_table(classifier), classes, handle_error, switch_str, handle_internal_error
-        );
 
-        return {
-            .classifier = std::move(classifier),
-            .transition = std::move(new_tab),
-            .class_count = classes,
-        };
+        std::unordered_map<int64_t, std::vector<uint8_t>> groups;
+        for (std::size_t ch = 0; ch < BYTE_MAX; ch++)
+        {
+            auto target = transition_table[(static_cast<std::size_t>(s) * BYTE_MAX) + ch];
+            if (target != -1)
+            {
+                groups[target].push_back(static_cast<uint8_t>(ch));
+            }
+        }
+
+        if (groups.empty())
+        {
+            out << "    goto FAIL;\n\n";
+            continue;
+        }
+
+        out << "    switch (src.peek())\n    {\n";
+        for (const auto& [target, bytes] : groups)
+        {
+            for (auto ch : bytes)
+            {
+                out << std::format("    case {}: ", static_cast<int>(ch));
+                total_cases++;
+            }
+            out << std::format("goto STATE_{};\n", target);
+        }
+        out << "    default: goto FAIL;\n    }\n\n";
     }
 
-    out << std::format(
-        FMT_CODEGEN_REGULAR, inc, format_table(transition_table), start_state, format_table(end_bitmask), format_table(end_to_nfa_state),
-        handle_error, switch_str, handle_internal_error
-    );
+    out << "FAIL:\n";
+    out << "    if (latest_match == -1)\n    {\n";
+    out << "        " << handle_error << "\n";
+    out << "    }\n\n";
+    out << "    src.backtrack();\n";
+    out << "    {\n";
+    out << "        [[maybe_unused]] std::string_view buffer = src.text();\n";
+    out << "        switch (latest_match)\n        {\n";
+
+    for (const auto& [nfa_state, handler] : handler_map)
+    {
+        out << std::format("        case {}: {}\n", nfa_state, handler);
+    }
+
+    out << "        default:\n            " << handle_internal_error << "\n";
+    out << "        }\n    }\n\n";
+
+    out << "    latest_match = -1;\n";
+    out << "    src.start_token();\n";
+    out << "    start_line = src.line();\n";
+    out << "    start_col = src.col();\n";
+    out << "    start_bytes = src.bytes();\n";
+    out << std::format("    goto STATE_{};\n", start_state);
+    out << "}\n";
 
     return {
-        .classifier = {},
-        .transition = transition_table,
-        .class_count = 0,
+        .state_count = states,
+        .case_count = total_cases,
     };
 }

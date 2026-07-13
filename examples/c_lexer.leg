@@ -1,94 +1,147 @@
 #include <string>
 #include <variant>
-#include <fmt/core.h>
+#include <format>
 #include <fstream>
-#define tok_range start_line, start_col, ctx.line, ctx.col, start_bytes, ctx.bytes
+#include <sstream>
+#include <iostream>
+#include <string_view>
+#define tok_range start_line, start_col, src.line(), src.col(), start_bytes, src.bytes()
 #define fmt_tok_range "@({}:{}-{}:{} {}-{})"
-struct lex_context
-{
-    std::istream& in = std::cin;
-    std::deque<char> buffer;
-    size_t peek_index;
 
-    size_t bytes, col, line;
-    size_t pbytes, pcol, pline;
+class span_source
+{
+    const char* cur;
+    const char* la;
+    const char* end;
+    const char* tok_start = nullptr;
+
+    std::size_t bytes_ = 0, col_ = 1, line_ = 1;
+    std::size_t la_bytes_ = 0, la_col_ = 1, la_line_ = 1;
+
+public:
+    span_source(const char* begin, const char* end) : cur(begin), la(begin), end(end) {}
+
+    auto peek() -> std::uint8_t
+    {
+        if (la >= end)
+        {
+            return 0;
+        }
+
+        char ch = *la++;
+        la_bytes_++;
+        la_col_++;
+        if (ch == '\n')
+        {
+            la_line_++;
+            la_col_ = 1;
+        }
+
+        return static_cast<std::uint8_t>(ch);
+    }
+
+    void accept()
+    {
+        cur = la;
+        bytes_ = la_bytes_;
+        col_ = la_col_;
+        line_ = la_line_;
+    }
+
+    void backtrack()
+    {
+        la = cur;
+        la_bytes_ = bytes_;
+        la_col_ = col_;
+        la_line_ = line_;
+    }
+
+    void start_token() { tok_start = cur; }
+
+    [[nodiscard]] auto text() const -> std::string_view { return {tok_start, cur}; }
+
+    [[nodiscard]] auto bytes() const -> std::size_t { return bytes_; }
+    [[nodiscard]] auto col() const -> std::size_t { return col_; }
+    [[nodiscard]] auto line() const -> std::size_t { return line_; }
+};
+
+struct app_ctx
+{
 };
 %%
-std::cerr << fmt::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
+std::cerr << std::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
 exit(-1);
 %%
-std::cerr << fmt::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); 
+std::cerr << std::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); 
 exit(-1);
 %%
 # adapted from https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
 /\s+/ break;
-"\0" fmt::println("TOK_EOF"); return false;
-"..." fmt::println("TOK_ELLIPSIS " fmt_tok_range, tok_range); return true;
-">>=" fmt::println("TOK_RIGHT_ASSIGN " fmt_tok_range, tok_range); return true;
-"<<=" fmt::println("TOK_LEFT_ASSIGN " fmt_tok_range, tok_range); return true;
-"+=" fmt::println("TOK_ADD_ASSIGN " fmt_tok_range, tok_range); return true;
-"-=" fmt::println("TOK_SUB_ASSIGN " fmt_tok_range, tok_range); return true;
-"*=" fmt::println("TOK_MUL_ASSIGN " fmt_tok_range, tok_range); return true;
-"/=" fmt::println("TOK_DIV_ASSIGN " fmt_tok_range, tok_range); return true;
-"%=" fmt::println("TOK_MOD_ASSIGN " fmt_tok_range, tok_range); return true;
-"&=" fmt::println("TOK_AND_ASSIGN " fmt_tok_range, tok_range); return true;
-"^=" fmt::println("TOK_XOR_ASSIGN " fmt_tok_range, tok_range); return true;
-"|=" fmt::println("TOK_OR_ASSIGN " fmt_tok_range, tok_range); return true;
-">>" fmt::println("TOK_RIGHT_OP " fmt_tok_range, tok_range); return true;
-"<<" fmt::println("TOK_LEFT_OP " fmt_tok_range, tok_range); return true;
-"++" fmt::println("TOK_INC_OP " fmt_tok_range, tok_range); return true;
-"--" fmt::println("TOK_DEC_OP " fmt_tok_range, tok_range); return true;
-"->" fmt::println("TOK_PTR_OP " fmt_tok_range, tok_range); return true;
-"&&" fmt::println("TOK_AND_OP " fmt_tok_range, tok_range); return true;
-"||" fmt::println("TOK_OR_OP " fmt_tok_range, tok_range); return true;
-"<=" fmt::println("TOK_LE_OP " fmt_tok_range, tok_range); return true;
-">=" fmt::println("TOK_GE_OP " fmt_tok_range, tok_range); return true;
-"==" fmt::println("TOK_EQ_OP " fmt_tok_range, tok_range); return true;
-"!=" fmt::println("TOK_NE_OP " fmt_tok_range, tok_range); return true;
-";" fmt::println("TOK(';') " fmt_tok_range, tok_range); return true;
-"{" fmt::println("TOK('{') " fmt_tok_range, tok_range); return true;
-"}" fmt::println("TOK('}') " fmt_tok_range, tok_range); return true;
-"," fmt::println("TOK(',') " fmt_tok_range, tok_range); return true;
-":" fmt::println("TOK(':') " fmt_tok_range, tok_range); return true;
-"=" fmt::println("TOK('=') " fmt_tok_range, tok_range); return true;
-"(" fmt::println("TOK('(') " fmt_tok_range, tok_range); return true;
-")" fmt::println("TOK(')') " fmt_tok_range, tok_range); return true;
-"[" fmt::println("TOK('[') " fmt_tok_range, tok_range); return true;
-"]" fmt::println("TOK(']') " fmt_tok_range, tok_range); return true;
-"." fmt::println("TOK('.') " fmt_tok_range, tok_range); return true;
-"&" fmt::println("TOK('&') " fmt_tok_range, tok_range); return true;
-"!" fmt::println("TOK('!') " fmt_tok_range, tok_range); return true;
-"~" fmt::println("TOK('~') " fmt_tok_range, tok_range); return true;
-"-" fmt::println("TOK('-') " fmt_tok_range, tok_range); return true;
-"+" fmt::println("TOK('+') " fmt_tok_range, tok_range); return true;
-"*" fmt::println("TOK('*') " fmt_tok_range, tok_range); return true;
-"/" fmt::println("TOK('/') " fmt_tok_range, tok_range); return true;
-"%" fmt::println("TOK('%') " fmt_tok_range, tok_range); return true;
-"<" fmt::println("TOK('<') " fmt_tok_range, tok_range); return true;
-">" fmt::println("TOK('>') " fmt_tok_range, tok_range); return true;
-"^" fmt::println("TOK('^') " fmt_tok_range, tok_range); return true;
-"|" fmt::println("TOK('|') " fmt_tok_range, tok_range); return true;
-"?" fmt::println("TOK('?') " fmt_tok_range, tok_range); return true;
+"\0" std::cout << std::format("TOK_EOF") << "\n"; return false;
+"..." std::cout << std::format("TOK_ELLIPSIS " fmt_tok_range, tok_range) << "\n"; return true;
+">>=" std::cout << std::format("TOK_RIGHT_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"<<=" std::cout << std::format("TOK_LEFT_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"+=" std::cout << std::format("TOK_ADD_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"-=" std::cout << std::format("TOK_SUB_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"*=" std::cout << std::format("TOK_MUL_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"/=" std::cout << std::format("TOK_DIV_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"%=" std::cout << std::format("TOK_MOD_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"&=" std::cout << std::format("TOK_AND_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"^=" std::cout << std::format("TOK_XOR_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+"|=" std::cout << std::format("TOK_OR_ASSIGN " fmt_tok_range, tok_range) << "\n"; return true;
+">>" std::cout << std::format("TOK_RIGHT_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"<<" std::cout << std::format("TOK_LEFT_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"++" std::cout << std::format("TOK_INC_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"--" std::cout << std::format("TOK_DEC_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"->" std::cout << std::format("TOK_PTR_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"&&" std::cout << std::format("TOK_AND_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"||" std::cout << std::format("TOK_OR_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"<=" std::cout << std::format("TOK_LE_OP " fmt_tok_range, tok_range) << "\n"; return true;
+">=" std::cout << std::format("TOK_GE_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"==" std::cout << std::format("TOK_EQ_OP " fmt_tok_range, tok_range) << "\n"; return true;
+"!=" std::cout << std::format("TOK_NE_OP " fmt_tok_range, tok_range) << "\n"; return true;
+";" std::cout << std::format("TOK(';') " fmt_tok_range, tok_range) << "\n"; return true;
+"{" std::cout << std::format("TOK('{{') " fmt_tok_range, tok_range) << "\n"; return true;
+"}" std::cout << std::format("TOK('}}') " fmt_tok_range, tok_range) << "\n"; return true;
+"," std::cout << std::format("TOK(',') " fmt_tok_range, tok_range) << "\n"; return true;
+":" std::cout << std::format("TOK(':') " fmt_tok_range, tok_range) << "\n"; return true;
+"=" std::cout << std::format("TOK('=') " fmt_tok_range, tok_range) << "\n"; return true;
+"(" std::cout << std::format("TOK('(') " fmt_tok_range, tok_range) << "\n"; return true;
+")" std::cout << std::format("TOK(')') " fmt_tok_range, tok_range) << "\n"; return true;
+"[" std::cout << std::format("TOK('[') " fmt_tok_range, tok_range) << "\n"; return true;
+"]" std::cout << std::format("TOK(']') " fmt_tok_range, tok_range) << "\n"; return true;
+"." std::cout << std::format("TOK('.') " fmt_tok_range, tok_range) << "\n"; return true;
+"&" std::cout << std::format("TOK('&') " fmt_tok_range, tok_range) << "\n"; return true;
+"!" std::cout << std::format("TOK('!') " fmt_tok_range, tok_range) << "\n"; return true;
+"~" std::cout << std::format("TOK('~') " fmt_tok_range, tok_range) << "\n"; return true;
+"-" std::cout << std::format("TOK('-') " fmt_tok_range, tok_range) << "\n"; return true;
+"+" std::cout << std::format("TOK('+') " fmt_tok_range, tok_range) << "\n"; return true;
+"*" std::cout << std::format("TOK('*') " fmt_tok_range, tok_range) << "\n"; return true;
+"/" std::cout << std::format("TOK('/') " fmt_tok_range, tok_range) << "\n"; return true;
+"%" std::cout << std::format("TOK('%') " fmt_tok_range, tok_range) << "\n"; return true;
+"<" std::cout << std::format("TOK('<') " fmt_tok_range, tok_range) << "\n"; return true;
+">" std::cout << std::format("TOK('>') " fmt_tok_range, tok_range) << "\n"; return true;
+"^" std::cout << std::format("TOK('^') " fmt_tok_range, tok_range) << "\n"; return true;
+"|" std::cout << std::format("TOK('|') " fmt_tok_range, tok_range) << "\n"; return true;
+"?" std::cout << std::format("TOK('?') " fmt_tok_range, tok_range) << "\n"; return true;
 
-/[A-Za-z_]\w*/ fmt::println("TOK_IDENTIFIER('{}') " fmt_tok_range, buffer, tok_range); return true;
-/0[xX][0-9a-fA-F]+([A-Za-z_]\w*)?/ fmt::println("TOK_HEX({}) " fmt_tok_range, buffer, tok_range); return true;
-/0[0-7]*([A-Za-z_]\w*)?/ fmt::println("TOK_OCT({}) " fmt_tok_range, buffer, tok_range); return true;
-/[1-9]\d*([A-Za-z_]\w*)?/ fmt::println("TOK_DEC({}) " fmt_tok_range, buffer, tok_range); return true;
-/L?'((\\.)|[^\\'])+'/ fmt::println("TOK_CHAR({}) " fmt_tok_range, buffer, tok_range); return true;
-/L?\"((\\.)|[^\\"])*\"/ fmt::println("TOK_STRING({}) " fmt_tok_range, buffer, tok_range); return true;
+/[A-Za-z_]\w*/ std::cout << std::format("TOK_IDENTIFIER('{}') " fmt_tok_range, buffer, tok_range) << "\n"; return true;
+/0[xX][0-9a-fA-F]+([A-Za-z_]\w*)?/ std::cout << std::format("TOK_HEX({}) " fmt_tok_range, buffer, tok_range) << "\n"; return true;
+/0[0-7]*([A-Za-z_]\w*)?/ std::cout << std::format("TOK_OCT({}) " fmt_tok_range, buffer, tok_range) << "\n"; return true;
+/[1-9]\d*([A-Za-z_]\w*)?/ std::cout << std::format("TOK_DEC({}) " fmt_tok_range, buffer, tok_range) << "\n"; return true;
+/L?'((\\.)|[^\\'])+'/ std::cout << std::format("TOK_CHAR({}) " fmt_tok_range, buffer, tok_range) << "\n"; return true;
+/L?\"((\\.)|[^\\"])*\"/ std::cout << std::format("TOK_STRING({}) " fmt_tok_range, buffer, tok_range) << "\n"; return true;
 %%
 
 // this will be inserted at the end of the file
-int main() 
+int main()
 {
-    lex_context context;
-    context.peek_index = 0;
-    context.bytes = 0;
-    context.col = 0;
-    context.line = 1;
-    context.pbytes = 0;
-    context.pcol = 0;
-    context.pline = 1;
+    std::stringstream buf;
+    buf << std::cin.rdbuf();
+    std::string source = buf.str();
 
-    while(lex_tok(context));
+    span_source src(source.data(), source.data() + source.size());
+    app_ctx ctx;
+
+    while (lex_tok(src, ctx));
 }

@@ -1,13 +1,4 @@
-#include "argparse.h"
-#include "build_config.h"
-#include "fwd.h"
-#include "machine/cg.h"
-#include "machine/dfa.h"
-#include "machine/nfa.h"
-#include "regex.h"
-#include "utils.h"
 #include <algorithm>
-#include "argparse.h"
 #include <bitset>
 #include <cassert>
 #include <cctype>

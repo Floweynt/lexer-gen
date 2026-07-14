@@ -44,7 +44,11 @@ namespace lexergen
         constexpr auto transition(int64_t from, int64_t end, char ch) -> nfa_builder&
         {
             max_val = std::max({max_val, from, end});
-            edges.push_back({from, end, ch});
+            edges.push_back({
+                .from = from,
+                .to = end,
+                .ch = ch,
+            });
             return *this;
         }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fwd.h"
+#include "machine/cg.h"
 #include "machine/data.h"
 #include "regex.h"
 #include <cstddef>
@@ -41,7 +42,9 @@ namespace lexergen
 
     public:
         void optimize(bool debug);
-        auto codegen(std::ostream& out, std::string inc, std::string handle_error, std::string handle_internal_error) const -> codegen_result;
+        auto codegen(
+            std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang
+        ) const -> codegen_result;
         void dump(std::ostream& ofs);
 
         constexpr auto get_transition_table() const -> const auto& { return transition_table; }

@@ -1,6 +1,6 @@
 # Lexer gen
 
-Simple modern `c++20` (or later) lexer generator. 
+Simple modern lexer generator.
 
 ## Example 
 
@@ -80,6 +80,23 @@ lexer-gen lexer.leg -o lexer_impl.cpp
 
 More examples can be found under the `examples` directory.
 
+## Target languages
+
+`-l`/`--lang` picks the target language: `cpp` (default), `c`, `java`, `javascript`, `python`. If
+omitted, it's inferred from `-o`'s extension. Each target's rule actions must be written in
+that language, and the `Source` snippet you copy in must match it:
+
+| target | dispatch strategy | `Source` snippet |
+|---|---|---|
+| cpp | `goto`-threaded, `Source`/`Ctx` are template params | `snippets/stream_source.hpp`, `snippets/span_source.hpp` |
+| c | `goto`-threaded, `Source`/`Ctx` are concrete types you typedef; methods are free functions `Source_peek(src)` etc. | `snippets/span_source.c.h` |
+| java | unthreaded switch; `Source` must be a concrete class named exactly `Source` | `snippets/Source.java` |
+| javascript | same switch-loop strategy as java, but untyped | `snippets/span_source.js` |
+| python | LUT | `snippets/span_source.py` |
+
+Function name and calling convention follow each language's idiom: `lex_tok(src, ctx)`
+in cpp/c/python, `lexTok(src, ctx)` in java/javascript.
+
 ## Building 
 Make sure you have `meson` installed, as well as a `c++20` (or later) compatible compiler with `<format>` support.
 
@@ -96,9 +113,18 @@ It is possible to dump the internal NFA (generated from the regular expressions)
 - `-D` - dump DFA
 - `-N` - dump NFA
 
+## Further optimization ideas
+- Shared equivalence classes to compress switch tables: keep per-state `goto`/`continue`
+  threading but classify bytes with one global classifier first, so each state's switch
+  has fewer, denser case values (smaller generated code, better icache) without
+  reintroducing a runtime transition array.
+- SIMD/SWAR scanning for common runs (whitespace, identifiers, digits) instead of one
+  byte at a time.
+- Hot-state layout: order state labels/cases by actual traversal frequency so the
+  common path is contiguous.
+
 ## TODO 
 - Unicode support
-- Other target languages (`c`, `js`, `java`, etc.)
 - Better regular expression parsing (macros, e.g. `{macro_name}`)
 - Better lexer specification parsing in general
 - Actually release the tree-sitter grammar

@@ -2,6 +2,7 @@
 #include <bitset>
 #include <cassert>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -62,7 +63,7 @@ namespace
     struct regex_reader
     {
         const std::string& str;
-        int index{};
+        size_t index{};
         tok curr_token{};
 
         auto lex_tok() -> tok

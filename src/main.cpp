@@ -1,10 +1,10 @@
 #include "argparse.h"
 #include "build_config.h"
+#include "machine/cg.h"
 #include "machine/dfa.h"
 #include "machine/nfa.h"
 #include "regex.h"
 #include "utils.h"
-#include <cstdint>
 #include <cstdlib>
 #include <format>
 #include <fstream>
@@ -87,6 +87,14 @@ inline static constexpr lexergen::option options[] = {
         .has_args = false,
         .required = false,
     },
+    {
+        .name = "lang",
+        .long_flag = "--lang",
+        .short_flag = "-l",
+        .description = "target language: cpp, c, java, javascript, python (default: inferred from -o's extension, else cpp)",
+        .has_args = true,
+        .required = false,
+    },
 };
 
 auto main(int argc, const char* argv[]) -> int
@@ -148,6 +156,22 @@ auto main(int argc, const char* argv[]) -> int
 
     std::string file_end = get_str_section(in_file);
 
+    auto lang = lexergen::target_lang::CPP;
+    if (args["lang"].present)
+    {
+        auto parsed = lexergen::parse_target_lang(args["lang"].value);
+        if (!parsed)
+        {
+            std::cerr << std::format("unknown --lang '{}' (expected cpp, c, java, javascript, python)\n", args["lang"].value);
+            exit(-1);
+        }
+        lang = *parsed;
+    }
+    else if (auto inferred = lexergen::infer_target_lang(args["cpp-out"].value))
+    {
+        lang = *inferred;
+    }
+
     std::ofstream out(args["cpp-out"].value);
     if (!out)
     {
@@ -162,7 +186,7 @@ auto main(int argc, const char* argv[]) -> int
         dfa.optimize(args["debug"].present);
     }
 
-    auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error);
+    auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, lang);
 
     if (!file_end.empty())
     {

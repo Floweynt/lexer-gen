@@ -4,9 +4,7 @@
 #include <cctype>
 #include <cstddef>
 #include <format>
-#include <print>
 #include <string>
-#include <vector>
 
 namespace lexergen
 {

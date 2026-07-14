@@ -2,6 +2,7 @@
 #include "fwd.h"
 #include "machine/data.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <iostream>
@@ -38,11 +39,12 @@ namespace
 auto lexergen::nfa_builder::build() -> dfa
 {
     const int64_t nodes = max_val + 1;
+    const auto class_count = static_cast<int64_t>(classes.class_count());
 
     std::list<entry> output_edges;
     std::unordered_map<std::vector<bool>, int64_t> subset_to_id;
     int64_t curr_node_id = 0;
-    std::vector<state_set> transition_table(nodes * BYTE_MAX);
+    std::vector<state_set> transition_table(static_cast<std::size_t>(nodes * class_count));
     std::vector<state_set> epsilon_table(nodes);
     std::vector<bool> start_bitset(nodes);
     std::vector<bool> tmp_state_set(nodes);
@@ -58,7 +60,7 @@ auto lexergen::nfa_builder::build() -> dfa
     }
     for (const auto& edge : edges)
     {
-        transition_table[(edge.from * BYTE_MAX) + (uint8_t)edge.ch].insert(edge.to);
+        transition_table[static_cast<std::size_t>((edge.from * class_count) + edge.class_id)].insert(edge.to);
     }
 
     nodes_to_process.push(start_bitset);
@@ -68,7 +70,7 @@ auto lexergen::nfa_builder::build() -> dfa
     {
         auto node = nodes_to_process.front();
         nodes_to_process.pop();
-        for (int64_t ch = 0; ch < BYTE_MAX; ch++)
+        for (int64_t class_id = 0; class_id < class_count; class_id++)
         {
             bool is_not_empty = false;
             for (int64_t i = 0; i < nodes; i++)
@@ -77,7 +79,7 @@ auto lexergen::nfa_builder::build() -> dfa
                 {
                     continue;
                 }
-                for (auto target : transition_table[(i * BYTE_MAX) + ch])
+                for (auto target : transition_table[static_cast<std::size_t>((i * class_count) + class_id)])
                 {
                     is_not_empty = true;
                     build_epsilon_closure_from(epsilon_table, target, tmp_state_set);
@@ -94,13 +96,13 @@ auto lexergen::nfa_builder::build() -> dfa
 
                 int64_t node_from = subset_to_id[node];
                 int64_t node_to = subset_to_id[tmp_state_set];
-                output_edges.push_back({node_from, node_to, (char)ch});
+                output_edges.push_back({.from = node_from, .to = node_to, .class_id = class_id});
                 tmp_state_set.assign(nodes, false);
             }
         }
     }
 
-    dfa ret(curr_node_id);
+    dfa ret(curr_node_id, classes);
     ret.start_state = 0;
 
     std::unordered_map<int64_t, std::vector<bool>> vec;
@@ -131,9 +133,10 @@ auto lexergen::nfa_builder::build() -> dfa
         }
     }
 
+    const int64_t dfa_row_width = class_count + 1; // +1: sentinel "no class" column, see dfa.h
     for (const auto& edge : output_edges)
     {
-        ret.transition_table[(edge.from * BYTE_MAX) + (uint8_t)edge.ch] = edge.to;
+        ret.transition_table[static_cast<std::size_t>((edge.from * dfa_row_width) + edge.class_id)] = edge.to;
     }
 
     return ret;

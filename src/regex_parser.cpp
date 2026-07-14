@@ -28,10 +28,12 @@ namespace
     struct tok
     {
         char ch;
+        uint32_t codepoint = 0;
 
         enum : uint8_t
         {
             TOK_CHAR,                   // regular char
+            TOK_CODEPOINT,              // \u{XXXX}
             TOK_GROUP_OPEN,             // (
             TOK_GROUP_CLOSE,            // )
             TOK_CHAR_OPEN,              // [
@@ -126,6 +128,30 @@ namespace
                     }
                     return {.ch = (char)val, .type = tok::TOK_CHAR};
                 }
+                case 'u': { // Handle \u{XXXX} unicode codepoint escape
+                    if (index >= str.size() || str[index] != '{')
+                    {
+                        throw regex_parse_error("expected '{' after \\u");
+                    }
+                    index++;
+
+                    uint32_t val = 0;
+                    bool any_digit = false;
+                    while (index < str.size() && isxdigit(str[index]))
+                    {
+                        char digit = str[index++];
+                        val = (val << 4) | static_cast<uint32_t>(isdigit(digit) ? digit - '0' : tolower(digit) - 'a' + 10);
+                        any_digit = true;
+                    }
+
+                    if (!any_digit || index >= str.size() || str[index] != '}')
+                    {
+                        throw regex_parse_error("malformed \\u{...} escape, expected \\u{HEX}");
+                    }
+                    index++;
+
+                    return {.ch = 0, .codepoint = val, .type = tok::TOK_CODEPOINT};
+                }
                 default:
                     return {.ch = ch, .type = tok::TOK_CHAR};
                 }
@@ -203,6 +229,15 @@ namespace
         }
     };
 
+    // A TOK_CHAR carries its value in `ch` (0-255); a TOK_CODEPOINT carries
+    // it in `codepoint` (any \u{...} value, including above 0xFF). This
+    // normalizes either into a single codepoint value for range/set
+    // construction.
+    auto tok_codepoint(const tok& token) -> char_set::codepoint
+    { return token.type == tok::TOK_CODEPOINT ? token.codepoint : static_cast<uint8_t>(token.ch); }
+
+    auto tok_charset(const tok& token) -> char_set { return char_set::single(tok_codepoint(token)); }
+
     auto parse_char_class(regex_reader& reader) -> regex
     {
         tok token{};
@@ -226,7 +261,7 @@ namespace
                 _case(tok::TOK_DASH, {
                     reader.next();
                     auto is_range = reader.curr().type != tok::TOK_CHAR_CLOSE;
-                    new_chars = is_range ? character_range(token.ch, reader.curr().ch) : character(token.ch) | character('-');
+                    new_chars = is_range ? codepoint_range(tok_codepoint(token), tok_codepoint(reader.curr())) : tok_charset(token) | character('-');
                     break;
                 });
                 _case(tok::TOK_CHARSET_ALPHA, new_chars = alphanumeric());
@@ -236,7 +271,7 @@ namespace
                 _case(tok::TOK_CHARSET_WHITESPACE, new_chars = whitespace());
                 _case(tok::TOK_CHARSET_NOT_WHITESPACE, new_chars = ~whitespace());
             default:
-                new_chars = character(token.ch);
+                new_chars = tok_charset(token);
             }
 
             current_charset = current_charset | new_chars;
@@ -355,6 +390,7 @@ namespace
             _case(tok::TOK_GROUP_OPEN, return parse_group(reader));
             _case(tok::TOK_WILDCARD, return char_regex(~empty()));
             _case(tok::TOK_STR, return parse_string(reader));
+            _case(tok::TOK_CODEPOINT, return char_regex(char_set::single(token.codepoint)));
         default:
             return char_regex(token.ch);
         }

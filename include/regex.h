@@ -1,27 +1,33 @@
 #pragma once
 
 #include "fwd.h"
-#include <bitset>
-#include <climits>
+#include "machine/interval_set.h"
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace lexergen
 {
+    class equivalence_classes;
+
     namespace detail
     {
         class regex_element
         {
         public:
-            virtual auto generate(lexergen::nfa_builder& builder, int64_t& node_alloc) const -> std::pair<int64_t, int64_t> = 0;
+            virtual auto generate(lexergen::nfa_builder& builder, int64_t& node_alloc, const lexergen::equivalence_classes& classes) const
+                -> std::pair<int64_t, int64_t> = 0;
+
+            virtual void collect_charsets(std::vector<interval_set>& out) const { (void)out; }
+
             virtual ~regex_element() = default;
         };
     } // namespace detail
 
-    using char_set = std::bitset<1 << CHAR_BIT>;
+    using char_set = interval_set;
     using regex = std::shared_ptr<detail::regex_element>;
     using macro_table = std::unordered_map<std::string, regex>;
 
@@ -37,10 +43,11 @@ namespace lexergen
 
     auto character(char ch) -> char_set;
     auto character_range(char ch_from, char ch_to) -> char_set;
+    auto codepoint_range(char_set::codepoint from, char_set::codepoint to) -> char_set;
     auto digit() -> char_set;
     auto alphanumeric() -> char_set;
     auto whitespace() -> char_set;
-    [[nodiscard]] constexpr auto empty() -> char_set { return {}; }
+    [[nodiscard]] inline auto empty() -> char_set { return {}; }
     auto xdigit() -> char_set;
 
     auto char_regex(char_set charset) -> regex;

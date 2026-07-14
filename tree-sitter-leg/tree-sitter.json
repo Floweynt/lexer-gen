@@ -1,0 +1,19 @@
+{
+    "grammars": [
+        {
+            "name": "leg",
+            "camelcase": "Leg",
+            "scope": "source.leg",
+            "path": ".",
+            "file-types": [
+                "leg"
+            ],
+            "highlights": "queries/highlights.scm"
+        }
+    ],
+    "metadata": {
+        "version": "0.1.0",
+        "license": "MIT",
+        "description": "tree-sitter grammar for lexer-gen's .leg lexer specification format"
+    }
+}

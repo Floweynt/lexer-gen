@@ -1,10 +1,12 @@
 #pragma once
 
-#include "fwd.h"
+#include "machine/equivalence_classes.h"
+#include "machine/interval_set.h"
 #include <cctype>
-#include <cstddef>
+#include <cstdint>
 #include <format>
 #include <string>
+#include <vector>
 
 namespace lexergen
 {
@@ -44,33 +46,36 @@ namespace lexergen
         return std::string(1, ch);
     }
 
-    constexpr auto format_string_class(auto check) -> std::string
+    inline auto fmt_codepoint(interval_set::codepoint cp) -> std::string
+    {
+        if (cp <= 0x7F)
+        {
+            return fmt_char(static_cast<char>(cp));
+        }
+        return std::format("\\u{{{:04X}}}", cp);
+    }
+
+    inline auto format_class_list(const std::vector<int64_t>& class_ids, const equivalence_classes& classes) -> std::string
     {
         std::string out;
-
-        for (size_t ch = 0; ch < BYTE_MAX; ch++)
+        for (auto class_id : class_ids)
         {
-            size_t start_ch = ch;
-            while (ch < BYTE_MAX && check(ch))
+            if (class_id >= static_cast<int64_t>(classes.class_count()))
             {
-                ch++;
-            }
-            size_t end_ch = ch;
-            if (start_ch == end_ch)
-            {
+                out += "<none>";
                 continue;
             }
 
-            if (start_ch + 1 == end_ch)
+            auto interval = classes.class_interval(class_id);
+            if (interval.lo == interval.hi)
             {
-                out += fmt_char((char)start_ch);
+                out += fmt_codepoint(interval.lo);
             }
             else
             {
-                out += std::format("[{}-{}]", fmt_char((char)start_ch), fmt_char((char)(end_ch - 1)));
+                out += std::format("[{}-{}]", fmt_codepoint(interval.lo), fmt_codepoint(interval.hi));
             }
         }
-
         return out;
     }
 

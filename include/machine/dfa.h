@@ -3,6 +3,7 @@
 #include "fwd.h"
 #include "machine/cg.h"
 #include "machine/data.h"
+#include "machine/equivalence_classes.h"
 #include "regex.h"
 #include <cstddef>
 #include <cstdint>
@@ -33,10 +34,15 @@ namespace lexergen
         std::vector<bool> end_bitmask;
         std::vector<int64_t> end_to_nfa_state;
         std::unordered_map<int64_t, std::string> handler_map;
+        equivalence_classes classes;
 
-        dfa(int64_t states) : transition_table(states * BYTE_MAX, -1), end_bitmask(states), end_to_nfa_state(states, -1) {}
+        dfa(int64_t states, equivalence_classes classes)
+            : transition_table(static_cast<std::size_t>(states) * (classes.class_count() + 1), -1), end_bitmask(states), end_to_nfa_state(states, -1),
+              classes(std::move(classes))
+        {
+        }
 
-        auto source_states(size_t ch, const state_set& target) -> state_set;
+        auto source_states(int64_t class_id, const state_set& target) -> state_set;
         auto hopcroft(const std::unordered_set<state_set>& initial) -> std::vector<state_set>;
         void reconstruct(const std::vector<state_set>& partitions);
 
@@ -51,6 +57,8 @@ namespace lexergen
         constexpr auto get_start_state() const -> const auto& { return start_state; }
         constexpr auto get_end_bitmask() const -> const auto& { return end_bitmask; }
         constexpr auto get_end_to_nfa_state() const -> const auto& { return end_to_nfa_state; }
-        constexpr auto get_state_count() const -> auto { return transition_table.size() / BYTE_MAX; }
+        constexpr auto get_state_count() const -> auto { return static_cast<int64_t>(end_bitmask.size()); }
+        auto get_class_count() const -> auto { return classes.class_count(); }
+        auto get_classes() const -> const auto& { return classes; }
     };
 } // namespace lexergen

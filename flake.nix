@@ -31,11 +31,16 @@
 
           mesonBuildType = "release";
         };
+        parser = pkgs.tree-sitter.buildGrammar {
+          language = "foo";
+          version = "0.42.0";
+          src = ./tree-sitter-leg;
+        };
       });
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
-          inputsFrom = [ self.packages.${pkgs.system}.default ];
+          inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.default ];
 
           packages = with pkgs; [
             ninja

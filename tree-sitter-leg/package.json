@@ -1,0 +1,40 @@
+{
+  "name": "tree-sitter-leg",
+  "version": "0.1.0",
+  "description": "tree-sitter grammar for lexer-gen's .leg lexer specification format",
+  "main": "bindings/node",
+  "keywords": [
+    "parser",
+    "lexer",
+    "tree-sitter"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "node-addon-api": "^8.0.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.24.0"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree-sitter": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "install": "node-gyp-build",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.leg",
+      "file-types": [
+        "leg"
+      ]
+    }
+  ]
+}

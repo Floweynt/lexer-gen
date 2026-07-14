@@ -1,8 +1,8 @@
 #pragma once
 
 #include "dfa.h"
+#include "machine/equivalence_classes.h"
 #include <algorithm>
-#include <concepts>
 #include <cstdint>
 #include <ostream>
 #include <utility>
@@ -15,7 +15,7 @@ namespace lexergen
         struct entry
         {
             int64_t from, to;
-            char ch;
+            int64_t class_id;
         };
 
         std::vector<entry> edges;
@@ -23,55 +23,41 @@ namespace lexergen
         std::vector<int64_t> start;
         std::vector<int64_t> end;
         int64_t max_val = 0;
+        equivalence_classes classes;
 
     public:
-        constexpr nfa_builder() = default;
+        nfa_builder() = default;
+        explicit nfa_builder(equivalence_classes classes) : classes(std::move(classes)) {}
 
-        template <std::convertible_to<char>... Args>
-            requires(sizeof...(Args) > 1)
-        constexpr auto transition(int64_t source, int64_t target, Args... val) -> nfa_builder&
-        { return transition(source, target, {((char)val)...}); }
-
-        constexpr auto transition(int64_t source, int64_t target, const std::vector<char>& transition_list) -> nfa_builder&
+        auto transition(int64_t from, int64_t to, int64_t class_id) -> nfa_builder&
         {
-            for (auto transition_ch : transition_list)
-            {
-                transition(source, target, transition_ch);
-            }
+            max_val = std::max({max_val, from, to});
+            edges.push_back({.from = from, .to = to, .class_id = class_id});
             return *this;
         }
 
-        constexpr auto transition(int64_t from, int64_t end, char ch) -> nfa_builder&
-        {
-            max_val = std::max({max_val, from, end});
-            edges.push_back({
-                .from = from,
-                .to = end,
-                .ch = ch,
-            });
-            return *this;
-        }
-
-        constexpr auto epsilon(int64_t from, int64_t end) -> nfa_builder&
+        auto epsilon(int64_t from, int64_t end) -> nfa_builder&
         {
             max_val = std::max({max_val, from, end});
             epsilon_edges.emplace_back(from, end);
             return *this;
         }
 
-        constexpr auto add_start(int64_t name) -> nfa_builder&
+        auto add_start(int64_t name) -> nfa_builder&
         {
             max_val = std::max(max_val, name);
             start.push_back(name);
             return *this;
         }
 
-        constexpr auto add_end(int64_t name) -> nfa_builder&
+        auto add_end(int64_t name) -> nfa_builder&
         {
             max_val = std::max(max_val, name);
             end.push_back(name);
             return *this;
         }
+
+        [[nodiscard]] auto get_classes() const -> const equivalence_classes& { return classes; }
 
         auto build() -> dfa;
         void dump(std::ostream& ofs);

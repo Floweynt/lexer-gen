@@ -126,19 +126,40 @@ It is possible to dump the internal NFA (generated from the regular expressions)
 - `-D` - dump DFA
 - `-N` - dump NFA
 
+## Unicode
+
+Patterns can reference codepoints via `\u{XXXX}` (a single codepoint) or, inside a
+`[...]` char class, `\u{XXXX}-\u{YYYY}` (an inclusive codepoint range), e.g.:
+```leg
+MACRO cjk_ident /[\u{4E00}-\u{9FFF}]+/
+```
+
+The DFA itself stays byte-oriented in every backend. There's no runtime codepoint
+alphabet or UTF-8 decode step unless the grammar actually references a codepoint above
+`0xFF`. Instead, every interval boundary in the grammar (plain byte ranges and `\u{...}`
+ranges alike) is collected once, before any NFA state exists, into a small set of
+grammar-wide equivalence classes (see `equivalence_classes` in
+`include/machine/equivalence_classes.h`). Typically, this yields tens of classes,
+never more than a small multiple of the number of distinct range endpoints actually
+written, regardless of how wide the underlying codepoint ranges are. Every backend's
+dispatch classifies the next input unit into one of these classes before switching on it:
+- Byte-only grammars (every `.leg` file that doesn't use `\u{...}` above `0xFF`, i.e.
+  everything before this feature existed) classify a single peeked byte through a
+  256-entry table.
+- Grammars that reference wider codepoints decode one UTF-8 codepoint (1-4 `peek()`
+  calls) and binary-search it against the grammar's class boundaries before dispatch.
+
+This also means other 8-bit encodings work today without any code changes: the
+classifier only cares about byte-level transition behavior, not what encoding those
+bytes represent, so a Latin-1 or Shift-JIS grammar is just byte-range regexes, no
+different from ASCII.
+
 ## Further optimization ideas
-- Shared equivalence classes to compress switch tables: keep per-state `goto`/`continue`
-  threading but classify bytes with one global classifier first, so each state's switch
-  has fewer, denser case values (smaller generated code, better icache) without
-  reintroducing a runtime transition array.
 - SIMD/SWAR scanning for common runs (whitespace, identifiers, digits) instead of one
-  byte at a time.
+  byte/codepoint at a time.
 - Hot-state layout: order state labels/cases by actual traversal frequency so the
   common path is contiguous.
 
-## TODO 
-- Unicode support
-- Better lexer specification parsing in general
-- Actually release the tree-sitter grammar
+## TODO
 - Parser generator
 

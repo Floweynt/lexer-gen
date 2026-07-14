@@ -11,16 +11,43 @@
 #include <iostream>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace
 {
+    auto trim(std::string_view str) -> std::string_view
+    {
+        auto start = str.find_first_not_of(" \t\r");
+        if (start == std::string_view::npos)
+        {
+            return {};
+        }
+
+        auto end = str.find_last_not_of(" \t\r");
+        return str.substr(start, end - start + 1);
+    }
+
+    auto split_first_word(std::string_view str) -> std::pair<std::string_view, std::string_view>
+    {
+        auto ws = str.find_first_of(" \t");
+        if (ws == std::string_view::npos)
+        {
+            return {str, {}};
+        }
+
+        auto word = str.substr(0, ws);
+        auto rest_start = str.find_first_not_of(" \t", ws);
+        auto rest = rest_start == std::string_view::npos ? std::string_view{} : str.substr(rest_start);
+        return {word, rest};
+    }
+
     auto get_str_section(std::istream& stream) -> std::string
     {
         std::string buf;
         std::string line;
-        while (std::getline(stream, line) && line != "%%")
+        while (std::getline(stream, line) && trim(line) != "%%")
         {
             buf += line + '\n';
         }
@@ -114,6 +141,11 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     std::ifstream in_file(files[0]);
+    if (!in_file)
+    {
+        std::cerr << "unable to open file: " << files[0] << '\n';
+        exit(-1);
+    }
 
     // The file format is defined as:
     // [preamble]
@@ -122,28 +154,71 @@ auto main(int argc, const char* argv[]) -> int
     // UNKNOWN [handler]
     // ERROR [handler]
     // MACRO name /expr/
-    // CLASS [class]
+    // %%
+    // [epilogue]
 
     std::string preamble = get_str_section(in_file);
-    std::string handle_error = get_str_section(in_file);
-    std::string handle_internal_error = get_str_section(in_file);
+    std::string handle_error;
+    std::string handle_internal_error;
+    bool has_unknown = false;
+    bool has_error = false;
     std::vector<std::pair<lexergen::regex, std::string>> tokens;
+    lexergen::macro_table macros;
 
     std::string line;
 
     while (std::getline(in_file, line))
     {
-        if (line == "%%")
+        auto trimmed = trim(line);
+
+        if (trimmed == "%%")
         {
             break;
         }
 
-        if (line.empty() || line.starts_with(";") || line.starts_with("#"))
+        if (trimmed.empty() || trimmed.starts_with(';') || trimmed.starts_with('#'))
         {
             continue;
         }
 
-        auto [success, expr, error_msg, rest] = lexergen::parse_regex(line);
+        auto [word, directive_rest] = split_first_word(trimmed);
+
+        if (word == "MACRO")
+        {
+            auto [name, expr_str] = split_first_word(directive_rest);
+            if (name.empty() || expr_str.empty())
+            {
+                std::cerr << std::format("malformed line `{}`: expected `MACRO name /expr/`\n", line);
+                exit(-1);
+            }
+
+            auto [success, expr, error_msg, macro_rest] = lexergen::parse_regex(std::string(expr_str), macros);
+            if (!success)
+            {
+                std::cerr << std::format("failed to parse macro `{}`: {}\n", name, error_msg);
+                exit(-1);
+            }
+
+            macros[std::string(name)] = expr;
+            continue;
+        }
+
+        if (word == "UNKNOWN")
+        {
+            handle_error = std::string(directive_rest);
+            has_unknown = true;
+            continue;
+        }
+
+        if (word == "ERROR")
+        {
+            handle_internal_error = std::string(directive_rest);
+            has_error = true;
+            continue;
+        }
+
+        auto rule_line = word == "RULE" ? directive_rest : trimmed;
+        auto [success, expr, error_msg, handler] = lexergen::parse_regex(std::string(rule_line), macros);
 
         if (!success)
         {
@@ -151,7 +226,13 @@ auto main(int argc, const char* argv[]) -> int
             exit(-1);
         }
 
-        tokens.emplace_back(expr, rest);
+        tokens.emplace_back(expr, handler);
+    }
+
+    if (!has_unknown || !has_error)
+    {
+        std::cerr << "missing UNKNOWN and/or ERROR handler directive\n";
+        exit(-1);
     }
 
     std::string file_end = get_str_section(in_file);

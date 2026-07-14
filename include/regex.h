@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace lexergen
@@ -22,6 +23,7 @@ namespace lexergen
 
     using char_set = std::bitset<1 << CHAR_BIT>;
     using regex = std::shared_ptr<detail::regex_element>;
+    using macro_table = std::unordered_map<std::string, regex>;
 
     struct regex_parse_result
     {
@@ -31,7 +33,7 @@ namespace lexergen
         std::string rest;
     };
 
-    auto parse_regex(const std::string& str) -> regex_parse_result;
+    auto parse_regex(const std::string& str, const macro_table& macros) -> regex_parse_result;
 
     auto character(char ch) -> char_set;
     auto character_range(char ch_from, char ch_to) -> char_set;

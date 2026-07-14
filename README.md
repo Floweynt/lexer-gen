@@ -14,14 +14,13 @@ To start, you need to create a file that describes the lexer, which is broken up
 #include "lexer.h"
 #define _curr {start_line, start_col, start_bytes}, {src.line(), src.col(), src.bytes()}
 %%
-// Token lex fail reporting
-ctx.report_error({src.line(), src.col(), src.bytes()}, "unknown token: failed to parse token");
-throw lexer_error();
-%%
-throw std::runtime_error("internal lexer error");
-%%
 # Lexer rules
 # Use hashtags as comments in this context
+
+# UNKNOWN fires when no rule matches; ERROR fires on an internal lexer bug.
+# Like every rule, each is a single line.
+UNKNOWN ctx.report_error({src.line(), src.col(), src.bytes()}, "unknown token: failed to parse token"); throw lexer_error();
+ERROR throw std::runtime_error("internal lexer error");
 
 # Match comment, whitespace, EOF 
 /\/\/[^\n]+/ break;
@@ -32,7 +31,7 @@ throw std::runtime_error("internal lexer error");
 /[a-zA-Z_]\w*/ return from_identifier(ctx, _curr, buffer);
 
 # match integers
-\d+ return integer_to_token(_curr, buffer);
+/\d+/ return integer_to_token(_curr, buffer);
 
 # match operators
 "+" return token(_curr, token::TOK_OPERATOR, token::OP_PLUS);
@@ -80,6 +79,20 @@ lexer-gen lexer.leg -o lexer_impl.cpp
 
 More examples can be found under the `examples` directory.
 
+## Macros
+
+`MACRO name /expr/` defines a reusable regex fragment, referenced from any later pattern
+(including other macros) as `{name}`:
+```leg
+MACRO digit /[0-9]/
+MACRO ident_start /[a-zA-Z_]/
+
+/{ident_start}({ident_start}|{digit})*/ return from_identifier(ctx, _curr, buffer);
+/{digit}+(\.{digit}+)?/ return integer_to_token(_curr, buffer);
+```
+`{name}` is only recognized as a macro reference inside a bare `/regex/`, not inside
+`"quoted strings"` or `[char classes]`, so `"{"` still matches a literal `{` byte.
+
 ## Target languages
 
 `-l`/`--lang` picks the target language: `cpp` (default), `c`, `java`, `javascript`, `python`. If
@@ -89,7 +102,7 @@ that language, and the `Source` snippet you copy in must match it:
 | target | dispatch strategy | `Source` snippet |
 |---|---|---|
 | cpp | `goto`-threaded, `Source`/`Ctx` are template params | `snippets/stream_source.hpp`, `snippets/span_source.hpp` |
-| c | `goto`-threaded, `Source`/`Ctx` are concrete types you typedef; methods are free functions `Source_peek(src)` etc. | `snippets/span_source.c.h` |
+| c | `goto`-threaded, `Source`/`Ctx` are concrete types you typedef; methods are free functions `Source_peek(src)` etc. | `snippets/span_source.h` |
 | java | unthreaded switch; `Source` must be a concrete class named exactly `Source` | `snippets/Source.java` |
 | javascript | same switch-loop strategy as java, but untyped | `snippets/span_source.js` |
 | python | LUT | `snippets/span_source.py` |
@@ -125,7 +138,6 @@ It is possible to dump the internal NFA (generated from the regular expressions)
 
 ## TODO 
 - Unicode support
-- Better regular expression parsing (macros, e.g. `{macro_name}`)
 - Better lexer specification parsing in general
 - Actually release the tree-sitter grammar
 - Parser generator

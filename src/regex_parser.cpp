@@ -63,6 +63,7 @@ namespace
     struct regex_reader
     {
         const std::string& str;
+        const macro_table& macros;
         size_t index{};
         tok curr_token{};
 
@@ -148,7 +149,17 @@ namespace
         }
 
     public:
-        regex_reader(const std::string& str) : str(str) { next(); }
+        regex_reader(const std::string& str, const macro_table& macros) : str(str), macros(macros) { next(); }
+
+        auto lookup_macro(const std::string& name) -> regex
+        {
+            auto iter = macros.find(name);
+            if (iter == macros.end())
+            {
+                throw regex_parse_error("undefined macro '{" + name + "}'");
+            }
+            return iter->second;
+        }
 
         auto next() -> tok
         {
@@ -307,9 +318,31 @@ namespace
         return string_regex(std::move(str));
     }
 
+    auto parse_macro_ref(regex_reader& reader) -> regex
+    {
+        std::string name;
+        tok token{};
+        while ((token = reader.next()).ch != '}')
+        {
+            if (token.type != tok::TOK_CHAR)
+            {
+                throw regex_parse_error("invalid character in macro reference");
+            }
+            name += token.ch;
+        }
+
+        return reader.lookup_macro(name);
+    }
+
     auto parse_atom(regex_reader& reader) -> regex
     {
         auto token = reader.next();
+
+        if (token.type == tok::TOK_CHAR && token.ch == '{')
+        {
+            return parse_macro_ref(reader);
+        }
+
         switch (token.type)
         {
             _case(tok::TOK_CHAR_OPEN, return parse_char_class(reader));
@@ -353,9 +386,9 @@ namespace
     }
 } // namespace
 
-auto lexergen::parse_regex(const std::string& str) -> regex_parse_result
+auto lexergen::parse_regex(const std::string& str, const macro_table& macros) -> regex_parse_result
 {
-    regex_reader reader(str);
+    regex_reader reader(str, macros);
 
     try
     {

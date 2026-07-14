@@ -83,12 +83,9 @@ typedef struct
 #define tok_range start_line, start_col, Source_line(src), Source_col(src), start_bytes, Source_bytes(src)
 #define fmt_tok_range "@(%zu:%zu-%zu:%zu %zu-%zu)"
 %%
-fprintf(stderr, "unknown token: failed to parse token " fmt_tok_range "\n", tok_range);
-exit(1);
-%%
-fprintf(stderr, "unknown token: internal lexer error " fmt_tok_range "\n", tok_range);
-exit(1);
-%%
+UNKNOWN fprintf(stderr, "unknown token: failed to parse token " fmt_tok_range "\n", tok_range); exit(1);
+ERROR fprintf(stderr, "unknown token: internal lexer error " fmt_tok_range "\n", tok_range); exit(1);
+
 # rules, use '#' for comments
 "\0" printf("TOK_EOF\n"); return 0;
 

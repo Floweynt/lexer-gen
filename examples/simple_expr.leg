@@ -69,21 +69,18 @@ struct app_ctx
 {
 };
 %%
-// token parsing failure handler 
-std::cerr << std::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
-exit(-1);
-%%
-// internal error handler 
-std::cerr << std::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); 
-exit(-1);
-%%
 # rules, use '#' for comments
 # keep in mind that rules and actions must be split by a " "
 # and use "..." for literal strings (no regex)
-# otherwise all rules will be interpreted as regular expressions 
-# note that the actions will be inserted as switch statements, so use {} if you want to declare locals 
+# otherwise all rules will be interpreted as regular expressions
+# note that the actions will be inserted as switch statements, so use {} if you want to declare locals
 
-# you can use breaks to restart processing, this is useful for ignoring whitespace 
+# UNKNOWN fires when no rule matches; ERROR fires if the lexer reaches an
+# internal state that's not supposed to be reachable. Both are a single line.
+UNKNOWN std::cerr << std::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); exit(-1);
+ERROR std::cerr << std::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); exit(-1);
+
+# you can use breaks to restart processing, this is useful for ignoring whitespace
 # you should probably match null bytes to detect end of file
 "\0" std::cout << std::format("TOK_EOF") << "\n"; return false;
 

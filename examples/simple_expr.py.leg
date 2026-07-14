@@ -59,12 +59,9 @@ class SpanSource:
 class Ctx:
     pass
 %%
-sys.stderr.write(f"unknown token: failed to parse token @({start_line}:{start_col}-{src.line()}:{src.col()} {start_bytes}-{src.bytes()})\n")
-sys.exit(1)
-%%
-sys.stderr.write(f"unknown token: internal lexer error @({start_line}:{start_col}-{src.line()}:{src.col()} {start_bytes}-{src.bytes()})\n")
-sys.exit(1)
-%%
+UNKNOWN sys.stderr.write(f"unknown token: failed to parse token @({start_line}:{start_col}-{src.line()}:{src.col()} {start_bytes}-{src.bytes()})\n"); sys.exit(1)
+ERROR sys.stderr.write(f"unknown token: internal lexer error @({start_line}:{start_col}-{src.line()}:{src.col()} {start_bytes}-{src.bytes()})\n"); sys.exit(1)
+
 "\0" print("TOK_EOF"); return False
 
 /[a-zA-Z_]\w*/ print(f"TOK_IDENT({buffer})"); return True

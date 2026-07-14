@@ -60,12 +60,9 @@ class SpanSource
 
 const ctx = {};
 %%
-console.error(`unknown token: failed to parse token @(${startLine}:${startCol}-${src.line()}:${src.col()} ${startBytes}-${src.bytes()})`);
-process.exit(1);
-%%
-console.error(`unknown token: internal lexer error @(${startLine}:${startCol}-${src.line()}:${src.col()} ${startBytes}-${src.bytes()})`);
-process.exit(1);
-%%
+UNKNOWN console.error(`unknown token: failed to parse token @(${startLine}:${startCol}-${src.line()}:${src.col()} ${startBytes}-${src.bytes()})`); process.exit(1);
+ERROR console.error(`unknown token: internal lexer error @(${startLine}:${startCol}-${src.line()}:${src.col()} ${startBytes}-${src.bytes()})`); process.exit(1);
+
 "\0" console.log("TOK_EOF"); return false;
 
 /[a-zA-Z_]\w*/ console.log(`TOK_IDENT(${buffer})`); return true;

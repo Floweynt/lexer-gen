@@ -60,12 +60,9 @@ final class Ctx
 public final class Lexer
 {
 %%
-System.err.println("unknown token: failed to parse token @(" + startLine + ":" + startCol + "-" + src.line() + ":" + src.col() + " " + startBytes + "-" + src.bytes() + ")");
-System.exit(1);
-%%
-System.err.println("unknown token: internal lexer error @(" + startLine + ":" + startCol + "-" + src.line() + ":" + src.col() + " " + startBytes + "-" + src.bytes() + ")");
-System.exit(1);
-%%
+UNKNOWN System.err.println("unknown token: failed to parse token @(" + startLine + ":" + startCol + "-" + src.line() + ":" + src.col() + " " + startBytes + "-" + src.bytes() + ")"); System.exit(1);
+ERROR System.err.println("unknown token: internal lexer error @(" + startLine + ":" + startCol + "-" + src.line() + ":" + src.col() + " " + startBytes + "-" + src.bytes() + ")"); System.exit(1);
+
 "\0" System.out.println("TOK_EOF"); return false;
 
 /[a-zA-Z_]\w*/ System.out.println("TOK_IDENT(" + buffer + ")"); return true;

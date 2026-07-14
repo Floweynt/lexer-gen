@@ -69,12 +69,9 @@ struct app_ctx
 {
 };
 %%
-std::cerr << std::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); 
-exit(-1);
-%%
-std::cerr << std::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); 
-exit(-1);
-%%
+UNKNOWN std::cerr << std::format("unknown token: failed to parse token " fmt_tok_range "\n", tok_range); exit(-1);
+ERROR std::cerr << std::format("unknown token: internal lexer error " fmt_tok_range "\n", tok_range); exit(-1);
+
 # adapted from https://www.lysator.liu.se/c/ANSI-C-grammar-l.html
 /\s+/ break;
 "\0" std::cout << std::format("TOK_EOF") << "\n"; return false;

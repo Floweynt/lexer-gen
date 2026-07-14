@@ -17,11 +17,30 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
     in
     {
+      packages = forAllSystems (pkgs: {
+        default = pkgs.stdenv.mkDerivation {
+          pname = "lexer-gen";
+          version = "1.0.0";
+
+          src = self;
+
+          nativeBuildInputs = with pkgs; [
+            meson
+            ninja
+          ];
+
+          mesonBuildType = "release";
+        };
+      });
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
+          inputsFrom = [ self.packages.${pkgs.system}.default ];
+
           packages = with pkgs; [
             ninja
             meson
+            clang-tools
           ];
         };
       });

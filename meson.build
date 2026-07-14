@@ -28,4 +28,5 @@ lexer_gen = executable('lexer-gen', sources,
     dependencies: [],
     cpp_pch: 'pch/pch.h',
     include_directories: include_directories(include_dirs),
+    install: true,
 )

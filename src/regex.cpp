@@ -3,6 +3,7 @@
 #include "machine/equivalence_classes.h"
 #include "machine/interval_set.h"
 #include "machine/nfa.h"
+#include "machine/unicode_identifier_ranges.h"
 #include <cctype>
 #include <cstdint>
 #include <memory>
@@ -27,6 +28,17 @@ namespace
 
         return data;
     }
+
+    template <size_t N>
+    auto from_intervals(const lexergen::unicode::codepoint_interval (&ivs)[N]) -> lexergen::char_set
+    {
+        lexergen::char_set data;
+        for (const auto& iv : ivs)
+        {
+            data |= lexergen::codepoint_range(iv.lo, iv.hi);
+        }
+        return data;
+    }
 } // namespace
 
 auto lexergen::character(char ch) -> char_set { return char_set::single(static_cast<uint8_t>(ch)); }
@@ -46,6 +58,17 @@ auto lexergen::alphanumeric() -> char_set
 auto lexergen::whitespace() -> char_set { return wrap_predicate<std::isspace>(); }
 
 auto lexergen::xdigit() -> char_set { return wrap_predicate<std::isxdigit>(); }
+
+auto lexergen::unicode_xid_start() -> char_set { return from_intervals(unicode::XID_START); }
+auto lexergen::unicode_xid_continue() -> char_set { return from_intervals(unicode::XID_CONTINUE); }
+
+auto lexergen::builtin_macros() -> macro_table
+{
+    macro_table macros;
+    macros["XID_Start"] = char_regex(unicode_xid_start());
+    macros["XID_Continue"] = char_regex(unicode_xid_continue());
+    return macros;
+}
 
 auto lexergen::char_regex(char_set charset) -> regex
 {

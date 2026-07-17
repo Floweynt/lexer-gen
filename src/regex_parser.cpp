@@ -1,5 +1,4 @@
 #include "regex.h"
-#include <bitset>
 #include <cassert>
 #include <cctype>
 #include <cstddef>
@@ -213,11 +212,15 @@ namespace
 
         template <typename... Args>
         auto match(Args... args)
-        { return (... || (args == curr().type)); }
+        {
+            return (... || (args == curr().type));
+        }
 
         template <typename... Args>
         auto match_advance(Args... args)
-        { return (... || (args == next().type)); }
+        {
+            return (... || (args == next().type));
+        }
 
         auto get_remaining() -> std::string
         {
@@ -229,12 +232,10 @@ namespace
         }
     };
 
-    // A TOK_CHAR carries its value in `ch` (0-255); a TOK_CODEPOINT carries
-    // it in `codepoint` (any \u{...} value, including above 0xFF). This
-    // normalizes either into a single codepoint value for range/set
-    // construction.
     auto tok_codepoint(const tok& token) -> char_set::codepoint
-    { return token.type == tok::TOK_CODEPOINT ? token.codepoint : static_cast<uint8_t>(token.ch); }
+    {
+        return token.type == tok::TOK_CODEPOINT ? token.codepoint : static_cast<uint8_t>(token.ch);
+    }
 
     auto tok_charset(const tok& token) -> char_set { return char_set::single(tok_codepoint(token)); }
 
@@ -398,14 +399,12 @@ namespace
 
     auto parse(regex_reader& reader)
     {
-        // handle literal strings first
         if (reader.match(tok::TOK_STR))
         {
             reader.next();
             return parse_string(reader);
         }
 
-        // handle actual regular expressions
         if (!reader.match_advance(tok::TOK_DELIM))
         {
             throw regex_parse_error("expected / at the start of regex");

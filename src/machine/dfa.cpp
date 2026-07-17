@@ -223,6 +223,8 @@ namespace
         const std::vector<int64_t>& end_to_nfa_state;
         const std::unordered_map<int64_t, std::string>& handler_map;
         const lexergen::equivalence_classes& classes;
+        std::string_view fn_name;
+        bool emit_prelude;
     };
 
     using class_groups = std::unordered_map<int64_t, std::vector<int64_t>>;
@@ -248,40 +250,41 @@ namespace
     {
         const auto class_count = dfa.classes.class_count();
         const auto sentinel = static_cast<int64_t>(class_count);
+        const auto prefix = std::string(dfa.fn_name) + "_";
 
         if (!needs_unicode_decode(dfa))
         {
-            out << "static const int64_t BYTE_CLASS[256] = {";
+            out << std::format("static const int64_t {}BYTE_CLASS[256] = {{", prefix);
             for (int cp = 0; cp < 256; cp++)
             {
                 out << dfa.classes.classify(static_cast<uint32_t>(cp)) << ",";
             }
             out << "};\n\n";
-            return std::format("BYTE_CLASS[(unsigned char){}]", peek_expr);
+            return std::format("{}BYTE_CLASS[(unsigned char){}]", prefix, peek_expr);
         }
 
         const auto& boundaries = dfa.classes.get_boundaries();
-        out << "static const uint32_t CLASS_BOUNDARIES[] = {";
+        out << std::format("static const uint32_t {}CLASS_BOUNDARIES[] = {{", prefix);
         for (auto b : boundaries)
         {
             out << b << "u,";
         }
         out << "};\n";
-        out << std::format("static const size_t CLASS_BOUNDARIES_LEN = {};\n\n", boundaries.size());
+        out << std::format("static const size_t {}CLASS_BOUNDARIES_LEN = {};\n\n", prefix, boundaries.size());
 
-        out << "static int64_t classify_cp(uint32_t cp)\n{\n";
-        out << "    size_t lo = 0, hi = CLASS_BOUNDARIES_LEN;\n";
+        out << std::format("static int64_t {}classify_cp(uint32_t cp)\n{{\n", prefix);
+        out << std::format("    size_t lo = 0, hi = {}CLASS_BOUNDARIES_LEN;\n", prefix);
         out << "    while (lo + 1 < hi)\n    {\n";
         out << "        size_t mid = lo + (hi - lo) / 2;\n";
-        out << "        if (CLASS_BOUNDARIES[mid] <= cp) lo = mid; else hi = mid;\n";
+        out << std::format("        if ({}CLASS_BOUNDARIES[mid] <= cp) lo = mid; else hi = mid;\n", prefix);
         out << "    }\n";
-        out << std::format("    if (lo + 1 >= CLASS_BOUNDARIES_LEN) return {};\n", sentinel);
+        out << std::format("    if (lo + 1 >= {}CLASS_BOUNDARIES_LEN) return {};\n", prefix, sentinel);
         out << "    return (int64_t)lo;\n";
         out << "}\n\n";
 
         out
-            << (is_cpp ? "template <typename Source>\nstatic uint32_t decode_utf8_cp(Source& src)\n{\n"
-                       : "static uint32_t decode_utf8_cp(Source *src)\n{\n");
+            << (is_cpp ? std::format("template <typename Source>\nstatic uint32_t {}decode_utf8_cp(Source& src)\n{{\n", prefix)
+                       : std::format("static uint32_t {}decode_utf8_cp(Source *src)\n{{\n", prefix));
         out << std::format("    uint32_t b0 = (unsigned char){};\n", peek_expr);
         out << "    if (b0 < 0x80) return b0;\n";
         out << "    int extra; uint32_t cp;\n";
@@ -297,53 +300,21 @@ namespace
         out << "    return cp;\n";
         out << "}\n\n";
 
-        return "classify_cp(decode_utf8_cp(src))";
-    }
-
-    auto indent_lines(std::string_view text, std::string_view prefix) -> std::string
-    {
-        std::string out;
-        std::size_t pos = 0;
-        bool any = false;
-
-        while (pos <= text.size())
-        {
-            auto nl = text.find('\n', pos);
-            auto line = text.substr(pos, nl == std::string_view::npos ? std::string_view::npos : nl - pos);
-
-            auto trimmed_end = line.find_last_not_of(" \t\r");
-            if (trimmed_end != std::string_view::npos)
-            {
-                out += prefix;
-                out += line.substr(0, trimmed_end + 1);
-                any = true;
-            }
-            out += '\n';
-
-            if (nl == std::string_view::npos)
-            {
-                break;
-            }
-            pos = nl + 1;
-        }
-
-        if (!any)
-        {
-            out = std::string(prefix) + "pass\n";
-        }
-
-        return out;
+        return std::format("{}classify_cp({}decode_utf8_cp(src))", prefix, prefix);
     }
 
     auto emit_cpp(
         std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error
     ) -> lexergen::codegen_result
     {
-        out << "#include <cstdint>\n#include <cstddef>\n#include <string_view>\n\n" << inc << "\n\n";
+        if (dfa.emit_prelude)
+        {
+            out << "#include <cstdint>\n#include <cstddef>\n#include <string_view>\n\n" << inc << "\n\n";
+        }
         auto class_expr = emit_c_family_classifier(out, dfa, "src.peek()", true);
 
         out << "template <typename Source, typename Ctx>\n";
-        out << "auto lex_tok(Source& src, Ctx& ctx)\n{\n";
+        out << std::format("auto {}(Source& src, Ctx& ctx)\n{{\n", dfa.fn_name);
         out << "    (void)ctx;\n";
         out << "    int64_t latest_match = -1;\n\n";
         out << "    src.start_token();\n";
@@ -415,13 +386,16 @@ namespace
         std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error
     ) -> lexergen::codegen_result
     {
-        out << "#include <stdint.h>\n#include <stddef.h>\n\n";
-        out << "typedef struct { const char *ptr; size_t len; } lex_text;\n\n";
-        out << inc << "\n\n";
-        out << "#ifndef LEX_RESULT_TYPE\n#define LEX_RESULT_TYPE int\n#endif\n\n";
+        if (dfa.emit_prelude)
+        {
+            out << "#include <stdint.h>\n#include <stddef.h>\n\n";
+            out << "typedef struct { const char *ptr; size_t len; } lex_text;\n\n";
+            out << inc << "\n\n";
+            out << "#ifndef LEX_RESULT_TYPE\n#define LEX_RESULT_TYPE int\n#endif\n\n";
+        }
         auto class_expr = emit_c_family_classifier(out, dfa, "Source_peek(src)", false);
 
-        out << "LEX_RESULT_TYPE lex_tok(Source *src, Ctx *ctx)\n{\n";
+        out << std::format("LEX_RESULT_TYPE {}(Source *src, Ctx *ctx)\n{{\n", dfa.fn_name);
         out << "    (void)ctx;\n";
         out << "    int64_t latest_match = -1;\n\n";
         out << "    Source_start_token(src);\n";
@@ -500,20 +474,21 @@ namespace
 
         const char* open = is_java ? "{" : "[";
         const char* close = is_java ? "}" : "]";
+        const auto prefix = std::string(dfa.fn_name) + "_";
 
         if (!needs_unicode_decode(dfa))
         {
-            out << decl << int_arr << " BYTE_CLASS = " << (is_java ? "new int[] " : "") << open;
+            out << decl << int_arr << std::format(" {}BYTE_CLASS = ", prefix) << (is_java ? "new int[] " : "") << open;
             for (int cp = 0; cp < 256; cp++)
             {
                 out << dfa.classes.classify(static_cast<uint32_t>(cp)) << ",";
             }
             out << close << ";\n\n";
-            return "BYTE_CLASS[src.peek()]";
+            return std::format("{}BYTE_CLASS[src.peek()]", prefix);
         }
 
         const auto& boundaries = dfa.classes.get_boundaries();
-        out << decl << (is_java ? "int[]" : "") << " CLASS_BOUNDARIES = " << (is_java ? "new int[] " : "") << open;
+        out << decl << (is_java ? "int[]" : "") << std::format(" {}CLASS_BOUNDARIES = ", prefix) << (is_java ? "new int[] " : "") << open;
         for (auto bound : boundaries)
         {
             out << bound << ",";
@@ -522,13 +497,15 @@ namespace
 
         if (is_java)
         {
-            out << "static int classifyCp(int cp)\n{\n";
-            out << "    int lo = 0, hi = CLASS_BOUNDARIES.length;\n";
-            out << "    while (lo + 1 < hi) { int mid = lo + (hi - lo) / 2; if (CLASS_BOUNDARIES[mid] <= cp) lo = mid; else hi = mid; }\n";
-            out << std::format("    if (lo + 1 >= CLASS_BOUNDARIES.length) return {};\n", sentinel);
+            out << std::format("static int {}classifyCp(int cp)\n{{\n", prefix);
+            out << std::format("    int lo = 0, hi = {}CLASS_BOUNDARIES.length;\n", prefix);
+            out << std::format(
+                "    while (lo + 1 < hi) {{ int mid = lo + (hi - lo) / 2; if ({}CLASS_BOUNDARIES[mid] <= cp) lo = mid; else hi = mid; }}\n", prefix
+            );
+            out << std::format("    if (lo + 1 >= {}CLASS_BOUNDARIES.length) return {};\n", prefix, sentinel);
             out << "    return lo;\n";
             out << "}\n\n";
-            out << "static int decodeUtf8Cp(Source src)\n{\n";
+            out << std::format("static int {}decodeUtf8Cp(Source src)\n{{\n", prefix);
             out << "    int b0 = src.peek();\n";
             out << "    if (b0 < 0x80) return b0;\n";
             out << "    int extra; int cp;\n";
@@ -540,16 +517,20 @@ namespace
                    "}\n";
             out << "    return cp;\n";
             out << "}\n\n";
-            return "classifyCp(decodeUtf8Cp(src))";
+            return std::format("{}classifyCp({}decodeUtf8Cp(src))", prefix, prefix);
         }
 
-        out << "function classifyCp(cp)\n{\n";
-        out << "    let lo = 0, hi = CLASS_BOUNDARIES.length;\n";
-        out << "    while (lo + 1 < hi) { const mid = lo + Math.floor((hi - lo) / 2); if (CLASS_BOUNDARIES[mid] <= cp) lo = mid; else hi = mid; }\n";
-        out << std::format("    if (lo + 1 >= CLASS_BOUNDARIES.length) return {};\n", sentinel);
+        out << std::format("function {}classifyCp(cp)\n{{\n", prefix);
+        out << std::format("    let lo = 0, hi = {}CLASS_BOUNDARIES.length;\n", prefix);
+        out << std::format(
+            "    while (lo + 1 < hi) {{ const mid = lo + Math.floor((hi - lo) / 2); if ({}CLASS_BOUNDARIES[mid] <= cp) lo = mid; else hi = mid; "
+            "}}\n",
+            prefix
+        );
+        out << std::format("    if (lo + 1 >= {}CLASS_BOUNDARIES.length) return {};\n", prefix, sentinel);
         out << "    return lo;\n";
         out << "}\n\n";
-        out << "function decodeUtf8Cp(src)\n{\n";
+        out << std::format("function {}decodeUtf8Cp(src)\n{{\n", prefix);
         out << "    const b0 = src.peek();\n";
         out << "    if (b0 < 0x80) return b0;\n";
         out << "    let extra, cp;\n";
@@ -561,7 +542,7 @@ namespace
                "}\n";
         out << "    return cp;\n";
         out << "}\n\n";
-        return "classifyCp(decodeUtf8Cp(src))";
+        return std::format("{}classifyCp({}decodeUtf8Cp(src))", prefix, prefix);
     }
 
     auto emit_switch_loop(
@@ -569,12 +550,15 @@ namespace
         bool is_java
     ) -> lexergen::codegen_result
     {
-        out << inc << "\n\n";
+        if (dfa.emit_prelude)
+        {
+            out << inc << "\n\n";
+        }
         auto class_expr = emit_js_family_classifier(out, dfa, is_java);
 
         if (is_java)
         {
-            out << "static Object lexTok(Source src, Ctx ctx)\n{\n";
+            out << std::format("static Object {}(Source src, Ctx ctx)\n{{\n", dfa.fn_name);
             out << "    int latestMatch = -1;\n";
             out << "    int state = " << dfa.start_state << ";\n\n";
             out << "    src.startToken();\n";
@@ -584,7 +568,7 @@ namespace
         }
         else
         {
-            out << "function lexTok(src, ctx)\n{\n";
+            out << std::format("function {}(src, ctx)\n{{\n", dfa.fn_name);
             out << "    let latestMatch = -1;\n";
             out << "    let state = " << dfa.start_state << ";\n\n";
             out << "    src.startToken();\n";
@@ -654,140 +638,11 @@ namespace
         return {.state_count = dfa.state_count, .case_count = total_cases};
     }
 
-    auto emit_python_classifier(std::ostream& out, const dfa_view& dfa) -> std::string
-    {
-        const auto class_count = dfa.classes.class_count();
-        const auto sentinel = static_cast<int64_t>(class_count);
-
-        if (!needs_unicode_decode(dfa))
-        {
-            out << "_BYTE_CLASS = [";
-            for (int cp = 0; cp < 256; cp++)
-            {
-                out << dfa.classes.classify(static_cast<uint32_t>(cp)) << ", ";
-            }
-            out << "]\n\n";
-            return "_BYTE_CLASS[src.peek()]";
-        }
-
-        const auto& boundaries = dfa.classes.get_boundaries();
-        out << "_CLASS_BOUNDARIES = [";
-        for (auto bound : boundaries)
-        {
-            out << bound << ", ";
-        }
-        out << "]\n\n";
-
-        out << "def _classify_cp(cp):\n";
-        out << "    lo, hi = 0, len(_CLASS_BOUNDARIES)\n";
-        out << "    while lo + 1 < hi:\n";
-        out << "        mid = lo + (hi - lo) // 2\n";
-        out << "        if _CLASS_BOUNDARIES[mid] <= cp:\n";
-        out << "            lo = mid\n";
-        out << "        else:\n";
-        out << "            hi = mid\n";
-        out << std::format("    if lo + 1 >= len(_CLASS_BOUNDARIES):\n        return {}\n", sentinel);
-        out << "    return lo\n\n";
-
-        out << "def _decode_utf8_cp(src):\n";
-        out << "    b0 = src.peek()\n";
-        out << "    if b0 < 0x80:\n        return b0\n";
-        out << "    if (b0 & 0xE0) == 0xC0:\n        extra, cp = 1, b0 & 0x1F\n";
-        out << "    elif (b0 & 0xF0) == 0xE0:\n        extra, cp = 2, b0 & 0x0F\n";
-        out << "    elif (b0 & 0xF8) == 0xF0:\n        extra, cp = 3, b0 & 0x07\n";
-        out << "    else:\n        return 0xFFFD\n";
-        out << "    for _ in range(extra):\n";
-        out << "        bn = src.peek()\n";
-        out << "        if (bn & 0xC0) != 0x80:\n            return 0xFFFD\n";
-        out << "        cp = (cp << 6) | (bn & 0x3F)\n";
-        out << "    return cp\n\n";
-
-        return "_classify_cp(_decode_utf8_cp(src))";
-    }
-
-    auto emit_python(
-        std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error
-    ) -> lexergen::codegen_result
-    {
-        out << inc << "\n\n";
-        auto class_expr = emit_python_classifier(out, dfa);
-
-        out << "_TRANSITIONS = [\n";
-
-        std::size_t total_cases = 0;
-
-        for (int64_t state = 0; state < static_cast<int64_t>(dfa.state_count); state++)
-        {
-            auto groups = build_class_groups(dfa, state);
-            out << "    {";
-            for (const auto& [target, class_ids] : groups)
-            {
-                for (auto class_id : class_ids)
-                {
-                    out << std::format("{}: {}, ", class_id, target);
-                    total_cases++;
-                }
-            }
-            out << "},\n";
-        }
-        out << "]\n\n";
-
-        out << "_ACCEPT = {";
-        for (int64_t state = 0; state < static_cast<int64_t>(dfa.state_count); state++)
-        {
-            if (dfa.end_bitmask[state])
-            {
-                out << std::format("{}: {}, ", state, dfa.end_to_nfa_state[state]);
-            }
-        }
-        out << "}\n\n";
-
-        out << std::format("_START = {}\n\n", dfa.start_state);
-
-        out << "def lex_tok(src, ctx):\n";
-        out << "    latest_match = -1\n";
-        out << "    state = _START\n\n";
-        out << "    src.start_token()\n";
-        out << "    start_line = src.line()\n";
-        out << "    start_col = src.col()\n";
-        out << "    start_bytes = src.bytes()\n\n";
-        out << "    while True:\n";
-        out << "        nfa_state = _ACCEPT.get(state)\n";
-        out << "        if nfa_state is not None:\n";
-        out << "            latest_match = nfa_state\n";
-        out << "            src.accept()\n\n";
-        out << std::format("        state = _TRANSITIONS[state].get({}, -1)\n\n", class_expr);
-        out << "        if state == -1:\n";
-        out << "            if latest_match == -1:\n";
-        out << indent_lines(handle_error, "                ");
-        out << "\n";
-        out << "            src.backtrack()\n";
-        out << "            buffer = src.text()\n";
-
-        bool first = true;
-        for (const auto& [nfa_state, handler] : dfa.handler_map)
-        {
-            out << std::format("            {} latest_match == {}:\n", first ? "if" : "elif", nfa_state);
-            out << indent_lines(handler, "                ");
-            first = false;
-        }
-        out << (first ? "            if True:\n" : "            else:\n");
-        out << indent_lines(handle_internal_error, "                ");
-
-        out << "\n";
-        out << "            latest_match = -1\n";
-        out << "            src.start_token()\n";
-        out << "            start_line = src.line()\n";
-        out << "            start_col = src.col()\n";
-        out << "            start_bytes = src.bytes()\n";
-        out << "            state = _START\n";
-
-        return {.state_count = dfa.state_count, .case_count = total_cases};
-    }
 } // namespace
 
 auto lexergen::dfa::codegen(
-    std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang
+    std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
+    std::string_view fn_name, bool emit_prelude
 ) const -> codegen_result
 {
     const dfa_view view{
@@ -798,6 +653,8 @@ auto lexergen::dfa::codegen(
         .end_to_nfa_state = end_to_nfa_state,
         .handler_map = handler_map,
         .classes = classes,
+        .fn_name = fn_name.empty() ? base_fn_name(lang) : fn_name,
+        .emit_prelude = emit_prelude,
     };
 
     switch (lang)
@@ -810,8 +667,6 @@ auto lexergen::dfa::codegen(
         return emit_switch_loop(out, view, inc, handle_error, handle_internal_error, true);
     case target_lang::JS:
         return emit_switch_loop(out, view, inc, handle_error, handle_internal_error, false);
-    case target_lang::PYTHON:
-        return emit_python(out, view, inc, handle_error, handle_internal_error);
     }
 
     return {.state_count = 0, .case_count = 0};

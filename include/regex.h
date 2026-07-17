@@ -49,6 +49,10 @@ namespace lexergen
     auto whitespace() -> char_set;
     [[nodiscard]] inline auto empty() -> char_set { return {}; }
     auto xdigit() -> char_set;
+    auto unicode_xid_start() -> char_set;
+    auto unicode_xid_continue() -> char_set;
+
+    auto builtin_macros() -> macro_table;
 
     auto char_regex(char_set charset) -> regex;
     auto string_regex(std::string str) -> regex;

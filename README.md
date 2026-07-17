@@ -93,9 +93,38 @@ MACRO ident_start /[a-zA-Z_]/
 `{name}` is only recognized as a macro reference inside a bare `/regex/`, not inside
 `"quoted strings"` or `[char classes]`, so `"{"` still matches a literal `{` byte.
 
+## Stateful lexing
+
+`STATE name { ... }` scopes a block of rules (its own `RULE`/`MACRO` lines) into their
+own DFA, compiled and emitted as their own entry point, e.g. `lex_tok_string(src, ctx)`
+next to the default `lex_tok(src, ctx)`. lexer-gen does not track "the current state"
+itself: which entry point to call is entirely up to your own driver code, e.g.:
+```leg
+UNKNOWN ...
+ERROR ...
+
+"\"" ctx.push(IN_STRING); return token{token::TOK_QUOTE};
+/{XID_Start}{XID_Continue}*/ return from_identifier(ctx, _curr, buffer);
+
+STATE string {
+    "\"" ctx.pop(); return token{token::TOK_QUOTE};
+    /[^"\\]+/ return token{token::TOK_STRING_CHUNK, std::string(src.text())};
+}
+```
+```cpp
+token lex(Source& src, Ctx& ctx) {
+    return ctx.top() == IN_STRING ? lex_tok_string(src, ctx) : lex_tok(src, ctx);
+}
+```
+A rule's action only hands control back to the caller when it `return`s; a rule ending
+in `break` (skip this token, e.g. whitespace) keeps scanning within the *same* DFA it's
+already in, so a state change made from a `break`-only rule won't take effect until that
+call eventually does `return` something. If you want a state switch to apply to the very
+next token, `return` immediately after making it (as above) rather than `break`ing.
+
 ## Target languages
 
-`-l`/`--lang` picks the target language: `cpp` (default), `c`, `java`, `javascript`, `python`. If
+`-l`/`--lang` picks the target language: `cpp` (default), `c`, `java`, `javascript`. If
 omitted, it's inferred from `-o`'s extension. Each target's rule actions must be written in
 that language, and the `Source` snippet you copy in must match it:
 
@@ -105,10 +134,9 @@ that language, and the `Source` snippet you copy in must match it:
 | c | `goto`-threaded, `Source`/`Ctx` are concrete types you typedef; methods are free functions `Source_peek(src)` etc. | `snippets/span_source.h` |
 | java | unthreaded switch; `Source` must be a concrete class named exactly `Source` | `snippets/Source.java` |
 | javascript | same switch-loop strategy as java, but untyped | `snippets/span_source.js` |
-| python | LUT | `snippets/span_source.py` |
 
 Function name and calling convention follow each language's idiom: `lex_tok(src, ctx)`
-in cpp/c/python, `lexTok(src, ctx)` in java/javascript.
+in cpp/c, `lexTok(src, ctx)` in java/javascript.
 
 ## Building 
 Make sure you have `meson` installed, as well as a `c++20` (or later) compatible compiler with `<format>` support.
@@ -134,25 +162,12 @@ Patterns can reference codepoints via `\u{XXXX}` (a single codepoint) or, inside
 MACRO cjk_ident /[\u{4E00}-\u{9FFF}]+/
 ```
 
-The DFA itself stays byte-oriented in every backend. There's no runtime codepoint
-alphabet or UTF-8 decode step unless the grammar actually references a codepoint above
-`0xFF`. Instead, every interval boundary in the grammar (plain byte ranges and `\u{...}`
-ranges alike) is collected once, before any NFA state exists, into a small set of
-grammar-wide equivalence classes (see `equivalence_classes` in
-`include/machine/equivalence_classes.h`). Typically, this yields tens of classes,
-never more than a small multiple of the number of distinct range endpoints actually
-written, regardless of how wide the underlying codepoint ranges are. Every backend's
-dispatch classifies the next input unit into one of these classes before switching on it:
-- Byte-only grammars (every `.leg` file that doesn't use `\u{...}` above `0xFF`, i.e.
-  everything before this feature existed) classify a single peeked byte through a
-  256-entry table.
-- Grammars that reference wider codepoints decode one UTF-8 codepoint (1-4 `peek()`
-  calls) and binary-search it against the grammar's class boundaries before dispatch.
-
-This also means other 8-bit encodings work today without any code changes: the
-classifier only cares about byte-level transition behavior, not what encoding those
-bytes represent, so a Latin-1 or Shift-JIS grammar is just byte-range regexes, no
-different from ASCII.
+Two macros are built into every grammar's macro table, so no `MACRO` line is needed to
+use them (a grammar can still redefine either name to override it): `{XID_Start}` and
+`{XID_Continue}`. Note `XID_Start` excludes `_`; add it explicitly
+(`/(_|{XID_Start}){XID_Continue}*/`) for languages like Python that allow a leading
+underscore. The tables are generated from Python's `unicodedata`; regenerate via
+`tools/gen_unicode_identifier_ranges.py` to bump the Unicode version.
 
 ## Further optimization ideas
 - SIMD/SWAR scanning for common runs (whitespace, identifiers, digits) instead of one

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -48,8 +49,10 @@ namespace lexergen
 
     public:
         void optimize(bool debug);
+
         auto codegen(
-            std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang
+            std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
+            std::string_view fn_name = "", bool emit_prelude = true
         ) const -> codegen_result;
         void dump(std::ostream& ofs);
 

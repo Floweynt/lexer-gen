@@ -31,7 +31,7 @@ namespace lexergen
                 return;
             }
 
-            std::ranges::sort(intervals, [](const interval& lhs, const interval& rhs) { return lhs.lo < rhs.lo; });
+            std::ranges::sort(intervals, [](const interval& lhs, const interval& rhs) -> bool { return lhs.lo < rhs.lo; });
 
             std::vector<interval> merged;
             merged.push_back(intervals[0]);

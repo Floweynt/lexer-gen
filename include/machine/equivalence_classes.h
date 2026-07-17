@@ -21,18 +21,18 @@ namespace lexergen
 
             for (const auto& set : charsets)
             {
-                for (const auto& iv : set.get_intervals())
+                for (const auto& interval : set.get_intervals())
                 {
-                    points.push_back(iv.lo);
-                    if (iv.hi < UINT32_MAX)
+                    points.push_back(interval.lo);
+                    if (interval.hi < UINT32_MAX)
                     {
-                        points.push_back(iv.hi + 1);
+                        points.push_back(interval.hi + 1);
                     }
                 }
             }
 
             std::ranges::sort(points);
-            points.erase(std::unique(points.begin(), points.end()), points.end());
+            points.erase(std::ranges::unique(points).begin(), points.end());
 
             equivalence_classes result;
             result.boundaries = std::move(points);
@@ -59,7 +59,9 @@ namespace lexergen
         }
 
         [[nodiscard]] auto class_range_for(interval_set::codepoint lo, interval_set::codepoint hi) const -> std::pair<std::int64_t, std::int64_t>
-        { return {classify(lo), classify(hi)}; }
+        {
+            return {classify(lo), classify(hi)};
+        }
 
         [[nodiscard]] auto class_interval(std::int64_t class_id) const -> interval_set::interval
         {

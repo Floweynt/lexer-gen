@@ -4,7 +4,6 @@
 #include "machine/dfa.h"
 #include "machine/nfa.h"
 #include "regex.h"
-#include "utils.h"
 #include <cstdlib>
 #include <format>
 #include <fstream>
@@ -55,20 +54,6 @@ namespace
         return buf;
     }
 
-    auto format_bitmask(std::vector<bool> bitset) -> std::string
-    {
-        std::string buf;
-        for (size_t i = 0; i < bitset.size(); i++)
-        {
-            if (bitset[i])
-            {
-                buf += std::to_string(i);
-                buf.push_back(',');
-            }
-        }
-        buf.pop_back();
-        return buf;
-    }
 } // namespace
 
 inline static constexpr lexergen::option options[] = {
@@ -118,7 +103,7 @@ inline static constexpr lexergen::option options[] = {
         .name = "lang",
         .long_flag = "--lang",
         .short_flag = "-l",
-        .description = "target language: cpp, c, java, javascript, python (default: inferred from -o's extension, else cpp)",
+        .description = "target language: cpp, c, java, javascript (default: inferred from -o's extension, else cpp)",
         .has_args = true,
         .required = false,
     },
@@ -154,16 +139,24 @@ auto main(int argc, const char* argv[]) -> int
     // UNKNOWN [handler]
     // ERROR [handler]
     // MACRO name /expr/
+    // STATE name {
+    //     RULE /expr/ [handler]
+    //     ...
+    // }
     // %%
     // [epilogue]
+    //
 
     std::string preamble = get_str_section(in_file);
     std::string handle_error;
     std::string handle_internal_error;
     bool has_unknown = false;
     bool has_error = false;
-    std::vector<std::pair<lexergen::regex, std::string>> tokens;
-    lexergen::macro_table macros;
+    using rule_table = std::vector<std::pair<lexergen::regex, std::string>>;
+    std::vector<std::pair<std::string, rule_table>> state_tables{{"", {}}};
+    std::string current_state;
+    std::size_t current_index = 0;
+    lexergen::macro_table macros = lexergen::builtin_macros();
 
     std::string line;
 
@@ -181,7 +174,52 @@ auto main(int argc, const char* argv[]) -> int
             continue;
         }
 
+        if (trimmed == "}")
+        {
+            if (current_state.empty())
+            {
+                std::cerr << "unexpected `}` outside of a STATE block\n";
+                exit(-1);
+            }
+            current_state.clear();
+            current_index = 0;
+            continue;
+        }
+
         auto [word, directive_rest] = split_first_word(trimmed);
+
+        if (word == "STATE")
+        {
+            if (!current_state.empty())
+            {
+                std::cerr << "STATE blocks cannot be nested\n";
+                exit(-1);
+            }
+
+            auto [name, brace] = split_first_word(directive_rest);
+            if (name.empty() || trim(brace) != "{")
+            {
+                std::cerr << std::format("malformed line `{}`: expected `STATE name {{`\n", line);
+                exit(-1);
+            }
+
+            for (const auto& [existing_name, existing_table] : state_tables)
+            {
+                (void)existing_table;
+                if (existing_name == name)
+                {
+                    std::cerr << std::format("duplicate STATE `{}`\n", name);
+                    exit(-1);
+                }
+            }
+
+            current_state = std::string(name);
+            state_tables.emplace_back(current_state, rule_table{});
+            current_index = state_tables.size() - 1;
+            continue;
+        }
+
+        auto& tokens = state_tables[current_index].second;
 
         if (word == "MACRO")
         {
@@ -229,6 +267,12 @@ auto main(int argc, const char* argv[]) -> int
         tokens.emplace_back(expr, handler);
     }
 
+    if (!current_state.empty())
+    {
+        std::cerr << std::format("unterminated STATE block `{}`: missing closing `}}`\n", current_state);
+        exit(-1);
+    }
+
     if (!has_unknown || !has_error)
     {
         std::cerr << "missing UNKNOWN and/or ERROR handler directive\n";
@@ -243,7 +287,7 @@ auto main(int argc, const char* argv[]) -> int
         auto parsed = lexergen::parse_target_lang(args["lang"].value);
         if (!parsed)
         {
-            std::cerr << std::format("unknown --lang '{}' (expected cpp, c, java, javascript, python)\n", args["lang"].value);
+            std::cerr << std::format("unknown --lang '{}' (expected cpp, c, java, javascript)\n", args["lang"].value);
             exit(-1);
         }
         lang = *parsed;
@@ -260,50 +304,61 @@ auto main(int argc, const char* argv[]) -> int
         exit(-1);
     }
 
-    auto [dfa, nfa] = lexergen::make_lexer(tokens);
+    const bool multi_state = state_tables.size() > 1;
+    auto base_fn_name = std::string(lexergen::base_fn_name(lang));
 
-    if (args["optimize"].present)
+    for (std::size_t i = 0; i < state_tables.size(); i++)
     {
-        dfa.optimize(args["debug"].present);
-    }
+        const auto& [state_name, tokens] = state_tables[i];
+        auto fn_name = state_name.empty() ? base_fn_name : base_fn_name + "_" + state_name;
 
-    auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, lang);
+        auto [dfa, nfa] = lexergen::make_lexer(tokens);
+
+        if (args["optimize"].present)
+        {
+            dfa.optimize(args["debug"].present);
+        }
+
+        auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, lang, fn_name, i == 0);
+
+        if (args["dfa-out"].present)
+        {
+            auto path =
+                multi_state ? std::format("{}.{}.dot", args["dfa-out"].value, state_name.empty() ? "default" : state_name) : args["dfa-out"].value;
+            std::ofstream dot_out(path);
+            if (!dot_out)
+            {
+                std::cerr << "unable to open file: " << path << '\n';
+                exit(-1);
+            }
+
+            dfa.dump(dot_out);
+        }
+
+        if (args["nfa-out"].present)
+        {
+            auto path =
+                multi_state ? std::format("{}.{}.dot", args["nfa-out"].value, state_name.empty() ? "default" : state_name) : args["nfa-out"].value;
+            std::ofstream dot_out(path);
+            if (!dot_out)
+            {
+                std::cerr << "unable to open file: " << path << '\n';
+                exit(-1);
+            }
+
+            nfa.dump(dot_out);
+        }
+
+        if (args["debug"].present)
+        {
+            std::cout << std::format("[{}] start state: {}\n", fn_name, dfa.get_start_state());
+            std::cout << std::format("[{}] states {}\n", fn_name, dfa.get_end_bitmask().size());
+            std::cout << std::format("[{}] emitted states: {}, emitted case labels: {}\n", fn_name, res.state_count, res.case_count);
+        }
+    }
 
     if (!file_end.empty())
     {
         out << file_end;
-    }
-
-    if (args["dfa-out"].present)
-    {
-        std::ofstream dot_out(args["dfa-out"].value);
-        if (!dot_out)
-        {
-            std::cerr << "unable to open file: " << args["dfa-out"].value << '\n';
-            exit(-1);
-        }
-
-        dfa.dump(dot_out);
-    }
-
-    if (args["nfa-out"].present)
-    {
-        std::ofstream dot_out(args["nfa-out"].value);
-        if (!dot_out)
-        {
-            std::cerr << "unable to open file: " << args["nfa-out"].value << '\n';
-            exit(-1);
-        }
-
-        nfa.dump(dot_out);
-    }
-
-    if (args["debug"].present)
-    {
-        std::cout << std::format("start state: {}\n", dfa.get_start_state());
-        std::cout << std::format("bitmask {}\n", format_bitmask(dfa.get_end_bitmask()));
-        std::cout << std::format("states {}\n", dfa.get_end_bitmask().size());
-        std::cout << std::format("state mapping {}\n", lexergen::format_table(dfa.get_end_to_nfa_state()));
-        std::cout << std::format("emitted states: {}, emitted case labels: {}\n", res.state_count, res.case_count);
     }
 }

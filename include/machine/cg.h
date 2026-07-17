@@ -12,7 +12,6 @@ namespace lexergen
         C,
         JAVA,
         JS,
-        PYTHON,
     };
 
     constexpr auto parse_target_lang(std::string_view name) -> std::optional<target_lang>
@@ -32,10 +31,6 @@ namespace lexergen
         if (name == "javascript" || name == "js")
         {
             return target_lang::JS;
-        }
-        if (name == "python" || name == "py")
-        {
-            return target_lang::PYTHON;
         }
         return std::nullopt;
     }
@@ -65,10 +60,20 @@ namespace lexergen
         {
             return target_lang::JS;
         }
-        if (ext == "py")
-        {
-            return target_lang::PYTHON;
-        }
         return std::nullopt;
+    }
+
+    constexpr auto base_fn_name(target_lang lang) -> std::string_view
+    {
+        switch (lang)
+        {
+        case target_lang::JAVA:
+        case target_lang::JS:
+            return "lexTok";
+        case target_lang::CPP:
+        case target_lang::C:
+            break;
+        }
+        return "lex_tok";
     }
 } // namespace lexergen

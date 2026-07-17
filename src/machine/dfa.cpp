@@ -318,8 +318,6 @@ namespace
         out << "    (void)ctx;\n";
         out << "    int64_t latest_match = -1;\n\n";
         out << "    src.start_token();\n";
-        out << "    [[maybe_unused]] std::size_t start_line = src.line();\n";
-        out << "    [[maybe_unused]] std::size_t start_col = src.col();\n";
         out << "    [[maybe_unused]] std::size_t start_bytes = src.bytes();\n\n";
         out << std::format("    goto STATE_{};\n\n", dfa.start_state);
 
@@ -373,8 +371,6 @@ namespace
 
         out << "    latest_match = -1;\n";
         out << "    src.start_token();\n";
-        out << "    start_line = src.line();\n";
-        out << "    start_col = src.col();\n";
         out << "    start_bytes = src.bytes();\n";
         out << std::format("    goto STATE_{};\n", dfa.start_state);
         out << "}\n";
@@ -399,10 +395,8 @@ namespace
         out << "    (void)ctx;\n";
         out << "    int64_t latest_match = -1;\n\n";
         out << "    Source_start_token(src);\n";
-        out << "    size_t start_line = Source_line(src);\n";
-        out << "    size_t start_col = Source_col(src);\n";
         out << "    size_t start_bytes = Source_bytes(src);\n";
-        out << "    (void)start_line; (void)start_col; (void)start_bytes;\n\n";
+        out << "    (void)start_bytes;\n\n";
         out << std::format("    goto STATE_{};\n\n", dfa.start_state);
 
         std::size_t total_cases = 0;
@@ -456,8 +450,6 @@ namespace
 
         out << "    latest_match = -1;\n";
         out << "    Source_start_token(src);\n";
-        out << "    start_line = Source_line(src);\n";
-        out << "    start_col = Source_col(src);\n";
         out << "    start_bytes = Source_bytes(src);\n";
         out << std::format("    goto STATE_{};\n", dfa.start_state);
         out << "}\n";
@@ -562,8 +554,6 @@ namespace
             out << "    int latestMatch = -1;\n";
             out << "    int state = " << dfa.start_state << ";\n\n";
             out << "    src.startToken();\n";
-            out << "    long startLine = src.line();\n";
-            out << "    long startCol = src.col();\n";
             out << "    long startBytes = src.bytes();\n\n";
         }
         else
@@ -572,8 +562,6 @@ namespace
             out << "    let latestMatch = -1;\n";
             out << "    let state = " << dfa.start_state << ";\n\n";
             out << "    src.startToken();\n";
-            out << "    let startLine = src.line();\n";
-            out << "    let startCol = src.col();\n";
             out << "    let startBytes = src.bytes();\n\n";
         }
 
@@ -628,8 +616,6 @@ namespace
 
         out << "        latestMatch = -1;\n";
         out << "        src.startToken();\n";
-        out << "        startLine = src.line();\n";
-        out << "        startCol = src.col();\n";
         out << "        startBytes = src.bytes();\n";
         out << std::format("        state = {};\n", dfa.start_state);
         out << "        continue;\n    }\n";

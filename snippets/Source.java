@@ -1,8 +1,8 @@
 final class Source {
     private final byte[] data;
     private int cur, la, tokStart;
-    private long bytesPos = 0, colPos = 1, linePos = 1;
-    private long laBytes = 0, laCol = 1, laLine = 1;
+    private long bytesPos = 0;
+    private long laBytes = 0;
 
     Source(byte[] data) {
         this.data = data;
@@ -15,11 +15,6 @@ final class Source {
 
         int ch = data[la++] & 0xFF;
         laBytes++;
-        laCol++;
-        if (ch == '\n') {
-            laLine++;
-            laCol = 1;
-        }
 
         return ch;
     }
@@ -27,15 +22,11 @@ final class Source {
     void accept() {
         cur = la;
         bytesPos = laBytes;
-        colPos = laCol;
-        linePos = laLine;
     }
 
     void backtrack() {
         la = cur;
         laBytes = bytesPos;
-        laCol = colPos;
-        laLine = linePos;
     }
 
     void startToken() {
@@ -48,13 +39,5 @@ final class Source {
 
     long bytes() {
         return bytesPos;
-    }
-
-    long col() {
-        return colPos;
-    }
-
-    long line() {
-        return linePos;
     }
 }

@@ -12,20 +12,20 @@ To start, you need to create a file that describes the lexer, which is broken up
 #include <format>
 #include <iostream>
 #include "lexer.h"
-#define _curr {start_line, start_col, start_bytes}, {src.line(), src.col(), src.bytes()}
+#define _curr start_bytes, src.bytes()
 %%
 # Lexer rules
 # Use hashtags as comments in this context
 
 # UNKNOWN fires when no rule matches; ERROR fires on an internal lexer bug.
 # Like every rule, each is a single line.
-UNKNOWN ctx.report_error({src.line(), src.col(), src.bytes()}, "unknown token: failed to parse token"); throw lexer_error();
+UNKNOWN ctx.report_error(src.bytes(), "unknown token: failed to parse token"); throw lexer_error();
 ERROR throw std::runtime_error("internal lexer error");
 
 # Match comment, whitespace, EOF 
 /\/\/[^\n]+/ break;
 /\s+/ break;
-"\0" return token({0, 0, 0}, {0, 0, 0}, token::TOK_EOF);
+"\0" return token(0, 0, token::TOK_EOF);
 
 # identifiers 
 /[a-zA-Z_]\w*/ return from_identifier(ctx, _curr, buffer);
@@ -67,9 +67,11 @@ Or write your own. A `Source` must provide:
 | `void backtrack()` | rewind lookahead back to the last `accept()` |
 | `void start_token()` | called when a new token starts scanning |
 | `text() const` | bytes from `start_token()` to the last `accept()` (string-view-like) |
-| `line() / col() / bytes() const` | position as of the last `accept()` |
+| `bytes() const` | byte offset as of the last `accept()` |
 
-Make sure that all rules (EOF and user defined) return the same type.
+Make sure that all rules (EOF and user defined) return the same type. `Source` only
+tracks byte offsets; line/column tracking is on you if you want it, e.g. counting `\n`
+(or `\r`/`\r\n`) in `text()` inside the rules that can contain them.
 
 To generate source, run:
 

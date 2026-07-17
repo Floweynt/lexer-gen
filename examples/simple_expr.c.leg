@@ -8,8 +8,8 @@ typedef struct
     const char* end;
     const char* tok_start;
 
-    size_t bytes, col, line;
-    size_t la_bytes, la_col, la_line;
+    size_t bytes;
+    size_t la_bytes;
 } Source;
 
 static void Source_init(Source* s, const char* begin, const char* end)
@@ -19,11 +19,7 @@ static void Source_init(Source* s, const char* begin, const char* end)
     s->end = end;
     s->tok_start = begin;
     s->bytes = 0;
-    s->col = 1;
-    s->line = 1;
     s->la_bytes = 0;
-    s->la_col = 1;
-    s->la_line = 1;
 }
 
 static int Source_peek(Source* s)
@@ -35,12 +31,6 @@ static int Source_peek(Source* s)
 
     unsigned char ch = (unsigned char)*s->la++;
     s->la_bytes++;
-    s->la_col++;
-    if (ch == '\n')
-    {
-        s->la_line++;
-        s->la_col = 1;
-    }
 
     return ch;
 }
@@ -49,16 +39,12 @@ static void Source_accept(Source* s)
 {
     s->cur = s->la;
     s->bytes = s->la_bytes;
-    s->col = s->la_col;
-    s->line = s->la_line;
 }
 
 static void Source_backtrack(Source* s)
 {
     s->la = s->cur;
     s->la_bytes = s->bytes;
-    s->la_col = s->col;
-    s->la_line = s->line;
 }
 
 static void Source_start_token(Source* s) { s->tok_start = s->cur; }
@@ -72,16 +58,14 @@ static lex_text Source_text(const Source* s)
 }
 
 static size_t Source_bytes(const Source* s) { return s->bytes; }
-static size_t Source_col(const Source* s) { return s->col; }
-static size_t Source_line(const Source* s) { return s->line; }
 
 typedef struct
 {
     int unused;
 } Ctx;
 
-#define tok_range start_line, start_col, Source_line(src), Source_col(src), start_bytes, Source_bytes(src)
-#define fmt_tok_range "@(%zu:%zu-%zu:%zu %zu-%zu)"
+#define tok_range start_bytes, Source_bytes(src)
+#define fmt_tok_range "@(%zu-%zu)"
 %%
 UNKNOWN fprintf(stderr, "unknown token: failed to parse token " fmt_tok_range "\n", tok_range); exit(1);
 ERROR fprintf(stderr, "unknown token: internal lexer error " fmt_tok_range "\n", tok_range); exit(1);

@@ -3,14 +3,16 @@
   "UNKNOWN"
   "ERROR"
   "RULE"
+  "STATE"
 ] @keyword
 
 (section_separator) @punctuation.special
 
 (comment) @comment
 
-(macro_def name: (identifier) @variable.parameter)
-(macro_ref name: (identifier) @variable.parameter)
+(macro_def name: (identifier) @variable)
+(macro_ref name: (identifier) @variable)
+(state_def name: (identifier) @function)
 
 (string_literal) @string
 (regex) @string.regex

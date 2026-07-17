@@ -7,7 +7,7 @@ module.exports = grammar({
         source_file: ($) => seq(
             field("preamble", optional($.preamble)),
             $.section_separator,
-            repeat(choice($.macro_def, $.unknown_directive, $.error_directive, $.rule, $.comment, $.blank_line)),
+            repeat(choice($.macro_def, $.unknown_directive, $.error_directive, $.rule, $.comment, $.blank_line, $.state_def)),
             $.section_separator,
             field("epilogue", optional($.epilogue)),
         ),
@@ -25,7 +25,7 @@ module.exports = grammar({
         _eol: ($) => token(/\r?\n/),
 
         macro_def: ($) => seq("MACRO", field("name", $.identifier), field("pattern", $._pattern), optional($._action), $._eol),
-
+        state_def: ($) => seq("STATE", field("name", $.identifier), "{", repeat($.rule), "}"),
         unknown_directive: ($) => seq("UNKNOWN", optional($._action), $._eol),
         error_directive: ($) => seq("ERROR", optional($._action), $._eol),
         rule: ($) => seq(optional("RULE"), field("pattern", $._pattern), field("action", optional($._action)), $._eol),

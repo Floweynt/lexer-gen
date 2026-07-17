@@ -288,7 +288,37 @@
           "named": true
         },
         {
+          "type": "state_def",
+          "named": true
+        },
+        {
           "type": "unknown_directive",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "state_def",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "rule",
           "named": true
         }
       ]
@@ -360,6 +390,10 @@
   },
   {
     "type": "RULE",
+    "named": false
+  },
+  {
+    "type": "STATE",
     "named": false
   },
   {

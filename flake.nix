@@ -46,6 +46,8 @@
             ninja
             meson
             clang-tools
+            tree-sitter
+            nodejs_24
           ];
         };
       });

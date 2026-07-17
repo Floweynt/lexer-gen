@@ -135,12 +135,12 @@ auto main(int argc, const char* argv[]) -> int
     // The file format is defined as:
     // [preamble]
     // %%
-    // RULE /expr/ [handler]
+    // RULE [priority] /expr/ [handler]
     // UNKNOWN [handler]
     // ERROR [handler]
     // MACRO name /expr/
     // STATE name {
-    //     RULE /expr/ [handler]
+    //     RULE [priority] /expr/ [handler]
     //     ...
     // }
     // %%
@@ -152,7 +152,7 @@ auto main(int argc, const char* argv[]) -> int
     std::string handle_internal_error;
     bool has_unknown = false;
     bool has_error = false;
-    using rule_table = std::vector<std::pair<lexergen::regex, std::string>>;
+    using rule_table = std::vector<lexergen::rule_def>;
     std::vector<std::pair<std::string, rule_table>> state_tables{{"", {}}};
     std::string current_state;
     std::size_t current_index = 0;
@@ -255,7 +255,20 @@ auto main(int argc, const char* argv[]) -> int
             continue;
         }
 
-        auto rule_line = word == "RULE" ? directive_rest : trimmed;
+        int64_t priority = 0;
+        std::string_view rule_line = trimmed;
+
+        if (word == "RULE")
+        {
+            rule_line = directive_rest;
+            auto [maybe_priority, after_priority] = split_first_word(rule_line);
+            if (!maybe_priority.empty() && maybe_priority.find_first_not_of("0123456789") == std::string_view::npos)
+            {
+                priority = std::stoll(std::string(maybe_priority));
+                rule_line = after_priority;
+            }
+        }
+
         auto [success, expr, error_msg, handler] = lexergen::parse_regex(std::string(rule_line), macros);
 
         if (!success)
@@ -264,7 +277,7 @@ auto main(int argc, const char* argv[]) -> int
             exit(-1);
         }
 
-        tokens.emplace_back(expr, handler);
+        tokens.push_back({.expr = expr, .handler = handler, .priority = priority});
     }
 
     if (!current_state.empty())

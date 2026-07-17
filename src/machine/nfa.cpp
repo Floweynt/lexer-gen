@@ -112,22 +112,36 @@ auto lexergen::nfa_builder::build() -> dfa
         vec[entry.second] = entry.first;
     }
 
+    std::unordered_map<int64_t, int64_t> priority_by_node;
+    for (const auto& e : end)
+    {
+        priority_by_node[e.node] = e.priority;
+    }
+
     for (const auto& entry : subset_to_id)
     {
-        for (auto nfa_node_id : end)
+        for (const auto& e : end)
         {
-            // if this state contains an end node...
+            auto nfa_node_id = e.node;
             if (entry.first[nfa_node_id])
             {
                 if (ret.end_bitmask[entry.second])
                 {
-                    std::cerr << std::format("possible conflict between states {} and {}\n", ret.end_to_nfa_state[entry.second], nfa_node_id);
-                    // pick the one with the greater node id, because of rules
-                    nfa_node_id = std::min(ret.end_to_nfa_state[entry.second], nfa_node_id);
+                    auto existing = ret.end_to_nfa_state[entry.second];
+                    std::cerr << std::format(
+                        "possible conflict between states {} (priority {}) and {} (priority {})\n", existing, priority_by_node[existing],
+                        nfa_node_id, e.priority
+                    );
+
+                    if (e.priority > priority_by_node[existing] || (e.priority == priority_by_node[existing] && nfa_node_id < existing))
+                    {
+                        ret.end_to_nfa_state[entry.second] = nfa_node_id;
+                    }
+
+                    continue;
                 }
 
                 ret.end_bitmask[entry.second] = true;
-                // we store the end state type from the NFA
                 ret.end_to_nfa_state[entry.second] = nfa_node_id;
             }
         }

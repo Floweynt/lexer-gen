@@ -18,10 +18,16 @@ namespace lexergen
             int64_t class_id;
         };
 
+        struct end_entry
+        {
+            int64_t node;
+            int64_t priority;
+        };
+
         std::vector<entry> edges;
         std::vector<std::pair<int64_t, int64_t>> epsilon_edges;
         std::vector<int64_t> start;
-        std::vector<int64_t> end;
+        std::vector<end_entry> end;
         int64_t max_val = 0;
         equivalence_classes classes;
 
@@ -50,10 +56,10 @@ namespace lexergen
             return *this;
         }
 
-        auto add_end(int64_t name) -> nfa_builder&
+        auto add_end(int64_t name, int64_t priority = 0) -> nfa_builder&
         {
             max_val = std::max(max_val, name);
-            end.push_back(name);
+            end.push_back({.node = name, .priority = priority});
             return *this;
         }
 

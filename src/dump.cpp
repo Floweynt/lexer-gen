@@ -66,9 +66,9 @@ void lexergen::nfa_builder::dump(std::ostream& ofs)
         ofs << std::format("{} [shape=triangle]\n", node);
     }
 
-    for (auto node : end)
+    for (const auto& e : end)
     {
-        ofs << std::format("{} [shape=box]\n", node);
+        ofs << std::format("{} [shape=box,label=\"{} (priority {})\"]\n", e.node, e.node, e.priority);
     }
 
     for (auto [from, to] : epsilon_edges)

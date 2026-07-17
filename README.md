@@ -95,6 +95,19 @@ MACRO ident_start /[a-zA-Z_]/
 `{name}` is only recognized as a macro reference inside a bare `/regex/`, not inside
 `"quoted strings"` or `[char classes]`, so `"{"` still matches a literal `{` byte.
 
+## Rule conflicts and priority
+
+Like every DFA-based lexer, the longest match wins; if two rules match the same longest
+text, that's a conflict (lexer-gen warns about it at generate time). By default the rule
+declared first in the file wins. `RULE <priority> /expr/ handler` (an integer right after
+`RULE`, before the pattern) overrides this: higher priority wins regardless of order, and
+equal priorities (including the default of `0`) fall back to declaration order.
+```leg
+RULE 10 /if|else|while/ return keyword_token(_curr);
+/[a-zA-Z_]\w*/ return from_identifier(ctx, _curr, buffer);
+```
+Here `if`/`else`/`while` win over the identifier rule even though it's declared after.
+
 ## Stateful lexing
 
 `STATE name { ... }` scopes a block of rules (its own `RULE`/`MACRO` lines) into their

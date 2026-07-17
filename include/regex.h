@@ -31,6 +31,13 @@ namespace lexergen
     using regex = std::shared_ptr<detail::regex_element>;
     using macro_table = std::unordered_map<std::string, regex>;
 
+    struct rule_def
+    {
+        regex expr;
+        std::string handler;
+        int64_t priority = 0;
+    };
+
     struct regex_parse_result
     {
         bool is_success;

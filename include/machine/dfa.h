@@ -17,7 +17,7 @@
 
 namespace lexergen
 {
-    auto make_lexer(const std::vector<std::pair<regex, std::string>>& table) -> std::pair<dfa, nfa_builder>;
+    auto make_lexer(const std::vector<rule_def>& table) -> std::pair<dfa, nfa_builder>;
 
     struct codegen_result
     {
@@ -28,7 +28,7 @@ namespace lexergen
     class dfa
     {
         friend class nfa_builder;
-        friend auto make_lexer(const std::vector<std::pair<regex, std::string>>& table) -> std::pair<dfa, nfa_builder>;
+        friend auto make_lexer(const std::vector<rule_def>& table) -> std::pair<dfa, nfa_builder>;
 
         std::vector<int64_t> transition_table;
         int64_t start_state{};

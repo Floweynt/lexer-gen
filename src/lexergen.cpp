@@ -9,12 +9,12 @@
 #include <utility>
 #include <vector>
 
-auto lexergen::make_lexer(const std::vector<std::pair<regex, std::string>>& table) -> std::pair<dfa, nfa_builder>
+auto lexergen::make_lexer(const std::vector<rule_def>& table) -> std::pair<dfa, nfa_builder>
 {
     std::vector<interval_set> charsets;
     for (const auto& entry : table)
     {
-        entry.first->collect_charsets(charsets);
+        entry.expr->collect_charsets(charsets);
     }
 
     nfa_builder nfa(equivalence_classes::build(charsets));
@@ -24,10 +24,10 @@ auto lexergen::make_lexer(const std::vector<std::pair<regex, std::string>>& tabl
 
     for (const auto& entry : table)
     {
-        auto [s, e] = entry.first->generate(nfa, node_alloc, nfa.get_classes());
+        auto [s, e] = entry.expr->generate(nfa, node_alloc, nfa.get_classes());
         nfa.epsilon(start, s);
-        nfa.add_end(e);
-        handler_map[e] = entry.second;
+        nfa.add_end(e, entry.priority);
+        handler_map[e] = entry.handler;
     }
 
     nfa.add_start(start);

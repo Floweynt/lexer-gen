@@ -219,7 +219,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_action"
+              "name": "action"
             },
             {
               "type": "BLANK"
@@ -276,7 +276,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_action"
+              "name": "action"
             },
             {
               "type": "BLANK"
@@ -301,7 +301,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_action"
+              "name": "action"
             },
             {
               "type": "BLANK"
@@ -345,7 +345,7 @@
             "members": [
               {
                 "type": "SYMBOL",
-                "name": "_action"
+                "name": "action"
               },
               {
                 "type": "BLANK"
@@ -376,7 +376,7 @@
         }
       ]
     },
-    "_action": {
+    "action": {
       "type": "TOKEN",
       "content": {
         "type": "PREC",

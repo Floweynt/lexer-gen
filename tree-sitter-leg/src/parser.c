@@ -33,7 +33,7 @@ enum ts_symbol_identifiers {
   anon_sym_ERROR = 11,
   anon_sym_RULE = 12,
   sym_identifier = 13,
-  sym__action = 14,
+  sym_action = 14,
   anon_sym_SLASH = 15,
   anon_sym_LPAREN = 16,
   anon_sym_RPAREN = 17,
@@ -92,7 +92,7 @@ static const char * const ts_symbol_names[] = {
   [anon_sym_ERROR] = "ERROR",
   [anon_sym_RULE] = "RULE",
   [sym_identifier] = "identifier",
-  [sym__action] = "_action",
+  [sym_action] = "action",
   [anon_sym_SLASH] = "/",
   [anon_sym_LPAREN] = "(",
   [anon_sym_RPAREN] = ")",
@@ -151,7 +151,7 @@ static const TSSymbol ts_symbol_map[] = {
   [anon_sym_ERROR] = anon_sym_ERROR,
   [anon_sym_RULE] = anon_sym_RULE,
   [sym_identifier] = sym_identifier,
-  [sym__action] = sym__action,
+  [sym_action] = sym_action,
   [anon_sym_SLASH] = anon_sym_SLASH,
   [anon_sym_LPAREN] = anon_sym_LPAREN,
   [anon_sym_RPAREN] = anon_sym_RPAREN,
@@ -252,8 +252,8 @@ static const TSSymbolMetadata ts_symbol_metadata[] = {
     .visible = true,
     .named = true,
   },
-  [sym__action] = {
-    .visible = false,
+  [sym_action] = {
+    .visible = true,
     .named = true,
   },
   [anon_sym_SLASH] = {
@@ -988,7 +988,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           ('a' <= lookahead && lookahead <= 'z')) ADVANCE(64);
       END_STATE();
     case 65:
-      ACCEPT_TOKEN(sym__action);
+      ACCEPT_TOKEN(sym_action);
       if (lookahead == '\r') ADVANCE(66);
       if (lookahead == '\t' ||
           lookahead == ' ') ADVANCE(65);
@@ -997,7 +997,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead != '\n') ADVANCE(66);
       END_STATE();
     case 66:
-      ACCEPT_TOKEN(sym__action);
+      ACCEPT_TOKEN(sym_action);
       if (lookahead != 0 &&
           lookahead != '\n') ADVANCE(66);
       END_STATE();
@@ -2343,47 +2343,47 @@ static const uint16_t ts_small_parse_table[] = {
     ACTIONS(266), 1,
       sym__eol,
     ACTIONS(268), 1,
-      sym__action,
+      sym_action,
   [1276] = 2,
     ACTIONS(270), 1,
       sym__eol,
     ACTIONS(272), 1,
-      sym__action,
+      sym_action,
   [1283] = 2,
     ACTIONS(274), 1,
       sym__eol,
     ACTIONS(276), 1,
-      sym__action,
+      sym_action,
   [1290] = 2,
     ACTIONS(278), 1,
       sym__eol,
     ACTIONS(280), 1,
-      sym__action,
+      sym_action,
   [1297] = 2,
     ACTIONS(282), 1,
       sym__eol,
     ACTIONS(284), 1,
-      sym__action,
+      sym_action,
   [1304] = 2,
     ACTIONS(286), 1,
       sym__eol,
     ACTIONS(288), 1,
-      sym__action,
+      sym_action,
   [1311] = 2,
     ACTIONS(290), 1,
       sym__eol,
     ACTIONS(292), 1,
-      sym__action,
+      sym_action,
   [1318] = 2,
     ACTIONS(294), 1,
       sym__eol,
     ACTIONS(296), 1,
-      sym__action,
+      sym_action,
   [1325] = 2,
     ACTIONS(298), 1,
       sym__eol,
     ACTIONS(300), 1,
-      sym__action,
+      sym_action,
   [1332] = 1,
     ACTIONS(302), 1,
       anon_sym_LBRACE,

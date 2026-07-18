@@ -24,16 +24,16 @@ module.exports = grammar({
 
         _eol: ($) => token(/\r?\n/),
 
-        macro_def: ($) => seq("MACRO", field("name", $.identifier), field("pattern", $._pattern), optional($._action), $._eol),
+        macro_def: ($) => seq("MACRO", field("name", $.identifier), field("pattern", $._pattern), optional($.action), $._eol),
         state_def: ($) => seq("STATE", field("name", $.identifier), "{", repeat($.rule), "}"),
-        unknown_directive: ($) => seq("UNKNOWN", optional($._action), $._eol),
-        error_directive: ($) => seq("ERROR", optional($._action), $._eol),
-        rule: ($) => seq(optional("RULE"), field("pattern", $._pattern), field("action", optional($._action)), $._eol),
+        unknown_directive: ($) => seq("UNKNOWN", optional($.action), $._eol),
+        error_directive: ($) => seq("ERROR", optional($.action), $._eol),
+        rule: ($) => seq(optional("RULE"), field("pattern", $._pattern), field("action", optional($.action)), $._eol),
 
         identifier: ($) => /[A-Za-z_][A-Za-z0-9_]*/,
 
         _pattern: ($) => choice($.regex, $.string_literal),
-        _action: ($) => token(prec(1, /[^\n]+/)),
+        action: ($) => token(prec(1, /[^\n]+/)),
 
         regex: ($) => seq("/", repeat($._regex_term), "/"),
 

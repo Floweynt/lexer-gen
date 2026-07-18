@@ -52,7 +52,7 @@ namespace lexergen
 
         auto codegen(
             std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
-            std::string_view fn_name = "", bool emit_prelude = true
+            std::string_view fn_name = "", bool emit_prelude = true, bool defer_accept = false
         ) const -> codegen_result;
         void dump(std::ostream& ofs);
 

@@ -107,6 +107,15 @@ inline static constexpr lexergen::option options[] = {
         .has_args = true,
         .required = false,
     },
+    {
+        .name = "defer-accept",
+        .long_flag = "--defer-accept",
+        .short_flag = "-A",
+        .description = "cpp/c targets: defer Source::accept() to end-of-token instead of every intermediate match "
+                        "(usually slower for grammars with long tokens; off by default)",
+        .has_args = false,
+        .required = false,
+    },
 };
 
 auto main(int argc, const char* argv[]) -> int
@@ -141,19 +150,30 @@ auto main(int argc, const char* argv[]) -> int
     // MACRO name /expr/
     // STATE name {
     //     RULE [priority] /expr/ [handler]
+    //     UNKNOWN [handler]  (optional, overrides the top-level one for this STATE)
+    //     ERROR [handler]    (optional, overrides the top-level one for this STATE)
     //     ...
     // }
     // %%
     // [epilogue]
     //
+    // UNKNOWN/ERROR are mandatory at the top level; a STATE block that doesn't
+    // declare its own falls back to the top-level handler.
 
     std::string preamble = get_str_section(in_file);
-    std::string handle_error;
-    std::string handle_internal_error;
-    bool has_unknown = false;
-    bool has_error = false;
     using rule_table = std::vector<lexergen::rule_def>;
-    std::vector<std::pair<std::string, rule_table>> state_tables{{"", {}}};
+
+    struct state_entry
+    {
+        std::string name;
+        rule_table tokens;
+        std::string handle_error;
+        bool has_unknown = false;
+        std::string handle_internal_error;
+        bool has_error = false;
+    };
+
+    std::vector<state_entry> state_tables{{.name = ""}};
     std::string current_state;
     std::size_t current_index = 0;
     lexergen::macro_table macros = lexergen::builtin_macros();
@@ -203,10 +223,9 @@ auto main(int argc, const char* argv[]) -> int
                 exit(-1);
             }
 
-            for (const auto& [existing_name, existing_table] : state_tables)
+            for (const auto& entry : state_tables)
             {
-                (void)existing_table;
-                if (existing_name == name)
+                if (entry.name == name)
                 {
                     std::cerr << std::format("duplicate STATE `{}`\n", name);
                     exit(-1);
@@ -214,12 +233,12 @@ auto main(int argc, const char* argv[]) -> int
             }
 
             current_state = std::string(name);
-            state_tables.emplace_back(current_state, rule_table{});
+            state_tables.push_back({.name = current_state});
             current_index = state_tables.size() - 1;
             continue;
         }
 
-        auto& tokens = state_tables[current_index].second;
+        auto& tokens = state_tables[current_index].tokens;
 
         if (word == "MACRO")
         {
@@ -243,15 +262,15 @@ auto main(int argc, const char* argv[]) -> int
 
         if (word == "UNKNOWN")
         {
-            handle_error = std::string(directive_rest);
-            has_unknown = true;
+            state_tables[current_index].handle_error = std::string(directive_rest);
+            state_tables[current_index].has_unknown = true;
             continue;
         }
 
         if (word == "ERROR")
         {
-            handle_internal_error = std::string(directive_rest);
-            has_error = true;
+            state_tables[current_index].handle_internal_error = std::string(directive_rest);
+            state_tables[current_index].has_error = true;
             continue;
         }
 
@@ -287,10 +306,22 @@ auto main(int argc, const char* argv[]) -> int
         exit(-1);
     }
 
-    if (!has_unknown || !has_error)
+    if (!state_tables[0].has_unknown || !state_tables[0].has_error)
     {
         std::cerr << "missing UNKNOWN and/or ERROR handler directive\n";
         exit(-1);
+    }
+
+    for (std::size_t i = 1; i < state_tables.size(); i++)
+    {
+        if (!state_tables[i].has_unknown)
+        {
+            state_tables[i].handle_error = state_tables[0].handle_error;
+        }
+        if (!state_tables[i].has_error)
+        {
+            state_tables[i].handle_internal_error = state_tables[0].handle_internal_error;
+        }
     }
 
     std::string file_end = get_str_section(in_file);
@@ -311,6 +342,8 @@ auto main(int argc, const char* argv[]) -> int
         lang = *inferred;
     }
 
+    const bool defer_accept = args["defer-accept"].present;
+
     std::ofstream out(args["cpp-out"].value);
     if (!out)
     {
@@ -323,22 +356,22 @@ auto main(int argc, const char* argv[]) -> int
 
     for (std::size_t i = 0; i < state_tables.size(); i++)
     {
-        const auto& [state_name, tokens] = state_tables[i];
-        auto fn_name = state_name.empty() ? base_fn_name : base_fn_name + "_" + state_name;
+        const auto& entry = state_tables[i];
+        auto fn_name = entry.name.empty() ? base_fn_name : base_fn_name + "_" + entry.name;
 
-        auto [dfa, nfa] = lexergen::make_lexer(tokens);
+        auto [dfa, nfa] = lexergen::make_lexer(entry.tokens);
 
         if (args["optimize"].present)
         {
             dfa.optimize(args["debug"].present);
         }
 
-        auto res = dfa.codegen(out, preamble, handle_error, handle_internal_error, lang, fn_name, i == 0);
+        auto res = dfa.codegen(out, preamble, entry.handle_error, entry.handle_internal_error, lang, fn_name, i == 0, defer_accept);
 
         if (args["dfa-out"].present)
         {
             auto path =
-                multi_state ? std::format("{}.{}.dot", args["dfa-out"].value, state_name.empty() ? "default" : state_name) : args["dfa-out"].value;
+                multi_state ? std::format("{}.{}.dot", args["dfa-out"].value, entry.name.empty() ? "default" : entry.name) : args["dfa-out"].value;
             std::ofstream dot_out(path);
             if (!dot_out)
             {
@@ -352,7 +385,7 @@ auto main(int argc, const char* argv[]) -> int
         if (args["nfa-out"].present)
         {
             auto path =
-                multi_state ? std::format("{}.{}.dot", args["nfa-out"].value, state_name.empty() ? "default" : state_name) : args["nfa-out"].value;
+                multi_state ? std::format("{}.{}.dot", args["nfa-out"].value, entry.name.empty() ? "default" : entry.name) : args["nfa-out"].value;
             std::ofstream dot_out(path);
             if (!dot_out)
             {

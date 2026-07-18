@@ -25,7 +25,13 @@ module.exports = grammar({
         _eol: ($) => token(/\r?\n/),
 
         macro_def: ($) => seq("MACRO", field("name", $.identifier), field("pattern", $._pattern), optional($.action), $._eol),
-        state_def: ($) => seq("STATE", field("name", $.identifier), "{", repeat($.rule), "}"),
+        state_def: ($) => seq(
+            "STATE",
+            field("name", $.identifier),
+            "{",
+            repeat(choice($.rule, $.unknown_directive, $.error_directive, $.comment, $.blank_line)),
+            "}",
+        ),
         unknown_directive: ($) => seq("UNKNOWN", optional($.action), $._eol),
         error_directive: ($) => seq("ERROR", optional($.action), $._eol),
         rule: ($) => seq(
@@ -73,7 +79,7 @@ module.exports = grammar({
         char_range: ($) => seq(choice($.escape, $.codepoint_escape, $.literal_char), "-", choice($.escape, $.codepoint_escape, $.literal_char)),
         macro_ref: ($) => seq("{", field("name", $.identifier), "}"),
 
-        escape: ($) => token(seq("\\", choice(/[wWdDsSafnrtv\\\/\.\*\+\?\|\(\)\[\]\^\-"]/, /[0-7]{1,3}/, /x[0-9a-fA-F]{1,2}/))),
+        escape: ($) => token(seq("\\", choice(/[0-7]{1,3}/, /x[0-9a-fA-F]{1,2}/, /./))),
 
         codepoint_escape: ($) => token(seq("\\u{", /[0-9a-fA-F]+/, "}")),
 

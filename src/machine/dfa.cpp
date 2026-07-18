@@ -304,20 +304,27 @@ namespace
     }
 
     auto emit_cpp(
-        std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error
+        std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error,
+        bool defer_accept
     ) -> lexergen::codegen_result
     {
         if (dfa.emit_prelude)
         {
             out << "#include <cstdint>\n#include <cstddef>\n#include <string_view>\n\n" << inc << "\n\n";
         }
-        auto class_expr = emit_c_family_classifier(out, dfa, "src.peek()", true);
+
+        const bool deferred = defer_accept && !needs_unicode_decode(dfa);
+        auto class_expr = emit_c_family_classifier(out, dfa, deferred ? "(consumed++, src.peek())" : "src.peek()", true);
 
         out << "template <typename Source, typename Ctx>\n";
         out << std::format("auto {}(Source& src, Ctx& ctx)\n{{\n", dfa.fn_name);
         out << "    (void)ctx;\n";
-        out << "    int64_t latest_match = -1;\n\n";
-        out << "    src.start_token();\n";
+        out << "    int64_t latest_match = -1;\n";
+        if (deferred)
+        {
+            out << "    int64_t consumed = 0;\n    int64_t matched_consumed = 0;\n";
+        }
+        out << "\n    src.start_token();\n";
         out << "    [[maybe_unused]] std::size_t start_bytes = src.bytes();\n\n";
         out << std::format("    goto STATE_{};\n\n", dfa.start_state);
 
@@ -329,7 +336,14 @@ namespace
 
             if (dfa.end_bitmask[state])
             {
-                out << std::format("    latest_match = {};\n    src.accept();\n", dfa.end_to_nfa_state[state]);
+                if (deferred)
+                {
+                    out << std::format("    latest_match = {};\n    matched_consumed = consumed;\n", dfa.end_to_nfa_state[state]);
+                }
+                else
+                {
+                    out << std::format("    latest_match = {};\n    src.accept();\n", dfa.end_to_nfa_state[state]);
+                }
             }
 
             auto groups = build_class_groups(dfa, state);
@@ -357,6 +371,11 @@ namespace
         out << "        " << handle_error << "\n";
         out << "    }\n\n";
         out << "    src.backtrack();\n";
+        if (deferred)
+        {
+            out << "    for (int64_t i = 0; i < matched_consumed; i++) { src.peek(); }\n";
+            out << "    src.accept();\n";
+        }
         out << "    {\n";
         out << "        [[maybe_unused]] std::string_view buffer = src.text();\n";
         out << "        switch (latest_match)\n        {\n";
@@ -370,6 +389,10 @@ namespace
         out << "        }\n    }\n\n";
 
         out << "    latest_match = -1;\n";
+        if (deferred)
+        {
+            out << "    consumed = 0;\n";
+        }
         out << "    src.start_token();\n";
         out << "    start_bytes = src.bytes();\n";
         out << std::format("    goto STATE_{};\n", dfa.start_state);
@@ -379,7 +402,8 @@ namespace
     }
 
     auto emit_c(
-        std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error
+        std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error,
+        bool defer_accept
     ) -> lexergen::codegen_result
     {
         if (dfa.emit_prelude)
@@ -389,12 +413,17 @@ namespace
             out << inc << "\n\n";
             out << "#ifndef LEX_RESULT_TYPE\n#define LEX_RESULT_TYPE int\n#endif\n\n";
         }
-        auto class_expr = emit_c_family_classifier(out, dfa, "Source_peek(src)", false);
+        const bool deferred = defer_accept && !needs_unicode_decode(dfa);
+        auto class_expr = emit_c_family_classifier(out, dfa, deferred ? "(consumed++, Source_peek(src))" : "Source_peek(src)", false);
 
         out << std::format("LEX_RESULT_TYPE {}(Source *src, Ctx *ctx)\n{{\n", dfa.fn_name);
         out << "    (void)ctx;\n";
-        out << "    int64_t latest_match = -1;\n\n";
-        out << "    Source_start_token(src);\n";
+        out << "    int64_t latest_match = -1;\n";
+        if (deferred)
+        {
+            out << "    int64_t consumed = 0;\n    int64_t matched_consumed = 0;\n";
+        }
+        out << "\n    Source_start_token(src);\n";
         out << "    size_t start_bytes = Source_bytes(src);\n";
         out << "    (void)start_bytes;\n\n";
         out << std::format("    goto STATE_{};\n\n", dfa.start_state);
@@ -407,7 +436,14 @@ namespace
 
             if (dfa.end_bitmask[state])
             {
-                out << std::format("    latest_match = {};\n    Source_accept(src);\n", dfa.end_to_nfa_state[state]);
+                if (deferred)
+                {
+                    out << std::format("    latest_match = {};\n    matched_consumed = consumed;\n", dfa.end_to_nfa_state[state]);
+                }
+                else
+                {
+                    out << std::format("    latest_match = {};\n    Source_accept(src);\n", dfa.end_to_nfa_state[state]);
+                }
             }
 
             auto groups = build_class_groups(dfa, state);
@@ -435,6 +471,11 @@ namespace
         out << "        " << handle_error << "\n";
         out << "    }\n\n";
         out << "    Source_backtrack(src);\n";
+        if (deferred)
+        {
+            out << "    { int64_t i; for (i = 0; i < matched_consumed; i++) { Source_peek(src); } }\n";
+            out << "    Source_accept(src);\n";
+        }
         out << "    {\n";
         out << "        lex_text buffer = Source_text(src);\n";
         out << "        (void)buffer;\n";
@@ -449,6 +490,10 @@ namespace
         out << "        }\n    }\n\n";
 
         out << "    latest_match = -1;\n";
+        if (deferred)
+        {
+            out << "    consumed = 0;\n";
+        }
         out << "    Source_start_token(src);\n";
         out << "    start_bytes = Source_bytes(src);\n";
         out << std::format("    goto STATE_{};\n", dfa.start_state);
@@ -628,7 +673,7 @@ namespace
 
 auto lexergen::dfa::codegen(
     std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
-    std::string_view fn_name, bool emit_prelude
+    std::string_view fn_name, bool emit_prelude, bool defer_accept
 ) const -> codegen_result
 {
     const dfa_view view{
@@ -646,9 +691,9 @@ auto lexergen::dfa::codegen(
     switch (lang)
     {
     case target_lang::CPP:
-        return emit_cpp(out, view, inc, handle_error, handle_internal_error);
+        return emit_cpp(out, view, inc, handle_error, handle_internal_error, defer_accept);
     case target_lang::C:
-        return emit_c(out, view, inc, handle_error, handle_internal_error);
+        return emit_c(out, view, inc, handle_error, handle_internal_error, defer_accept);
     case target_lang::JAVA:
         return emit_switch_loop(out, view, inc, handle_error, handle_internal_error, true);
     case target_lang::JS:

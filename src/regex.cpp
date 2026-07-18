@@ -44,7 +44,9 @@ namespace
 auto lexergen::character(char ch) -> char_set { return char_set::single(static_cast<uint8_t>(ch)); }
 
 auto lexergen::character_range(char ch_from, char ch_to) -> char_set
-{ return char_set::range(static_cast<uint8_t>(ch_from), static_cast<uint8_t>(ch_to)); }
+{
+    return char_set::range(static_cast<uint8_t>(ch_from), static_cast<uint8_t>(ch_to));
+}
 
 auto lexergen::codepoint_range(char_set::codepoint from, char_set::codepoint to) -> char_set { return char_set::range(from, to); }
 

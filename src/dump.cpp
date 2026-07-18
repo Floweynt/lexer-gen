@@ -10,9 +10,14 @@
 #include <unordered_map>
 #include <unordered_set>
 
+namespace
+{
+    constexpr const char* DOT_PRELUDE = "graph [fontname=\"Courier\"];\nnode [fontname=\"Courier\"];\nedge [fontname=\"Courier\"];\n";
+}
+
 void lexergen::dfa::dump(std::ostream& ofs)
 {
-    ofs << "digraph G{";
+    ofs << "digraph G{\n" << DOT_PRELUDE;
     const auto row_width = static_cast<int64_t>(get_class_count()) + 1;
 
     for (int64_t i = 0; i < get_state_count(); i++)
@@ -30,7 +35,7 @@ void lexergen::dfa::dump(std::ostream& ofs)
 
         for (const auto& [entry, class_ids] : target_classes)
         {
-            ofs << std::format("{} -> {} [label=\"{}\"]\n", i, entry, lexergen::format_class_list(class_ids, classes));
+            ofs << std::format("{} -> {} [label=<{}>]\n", i, entry, lexergen::format_class_list(class_ids, classes));
         }
 
         if (end_bitmask[i])
@@ -44,7 +49,7 @@ void lexergen::dfa::dump(std::ostream& ofs)
 
 void lexergen::nfa_builder::dump(std::ostream& ofs)
 {
-    ofs << "digraph G{";
+    ofs << "digraph G{\n" << DOT_PRELUDE;
 
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, std::vector<int64_t>>> transition_table;
 
@@ -57,7 +62,7 @@ void lexergen::nfa_builder::dump(std::ostream& ofs)
     {
         for (const auto& [to, class_ids] : to_map)
         {
-            ofs << std::format("{} -> {} [label=\"{}\"]\n", from, to, lexergen::format_class_list(class_ids, classes));
+            ofs << std::format("{} -> {} [label=<{}>]\n", from, to, lexergen::format_class_list(class_ids, classes));
         }
     }
 

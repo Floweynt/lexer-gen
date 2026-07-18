@@ -112,7 +112,7 @@ inline static constexpr lexergen::option options[] = {
         .long_flag = "--defer-accept",
         .short_flag = "-A",
         .description = "cpp/c targets: defer Source::accept() to end-of-token instead of every intermediate match "
-                        "(usually slower for grammars with long tokens; off by default)",
+                       "(usually slower for grammars with long tokens; off by default)",
         .has_args = false,
         .required = false,
     },

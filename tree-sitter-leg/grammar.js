@@ -35,7 +35,7 @@ module.exports = grammar({
             $._eol,
         ),
 
-        priority: ($) => /[0-9]+/,
+        priority: ($) => /-?[0-9]+/,
 
         identifier: ($) => /[A-Za-z_][A-Za-z0-9_]*/,
 

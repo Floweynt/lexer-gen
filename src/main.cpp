@@ -262,7 +262,8 @@ auto main(int argc, const char* argv[]) -> int
         {
             rule_line = directive_rest;
             auto [maybe_priority, after_priority] = split_first_word(rule_line);
-            if (!maybe_priority.empty() && maybe_priority.find_first_not_of("0123456789") == std::string_view::npos)
+            auto digits = maybe_priority.starts_with('-') ? maybe_priority.substr(1) : maybe_priority;
+            if (!digits.empty() && digits.find_first_not_of("0123456789") == std::string_view::npos)
             {
                 priority = std::stoll(std::string(maybe_priority));
                 rule_line = after_priority;

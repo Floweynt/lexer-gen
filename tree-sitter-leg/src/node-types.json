@@ -203,17 +203,7 @@
     }
   },
   {
-    "type": "number",
-    "named": true,
-    "fields": {}
-  },
-  {
     "type": "preamble",
-    "named": true,
-    "fields": {}
-  },
-  {
-    "type": "priority",
     "named": true,
     "fields": {}
   },
@@ -542,6 +532,14 @@
   },
   {
     "type": "literal_char",
+    "named": true
+  },
+  {
+    "type": "number",
+    "named": true
+  },
+  {
+    "type": "priority",
     "named": true
   },
   {

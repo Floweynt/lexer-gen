@@ -128,10 +128,11 @@ auto lexergen::nfa_builder::build() -> dfa
                 if (ret.end_bitmask[entry.second])
                 {
                     auto existing = ret.end_to_nfa_state[entry.second];
-                    std::cerr << std::format(
-                        "possible conflict between states {} (priority {}) and {} (priority {})\n", existing, priority_by_node[existing],
-                        nfa_node_id, e.priority
-                    );
+
+                    if (e.priority == priority_by_node[existing])
+                    {
+                        std::cerr << std::format("possible conflict between states {} and {} (priority {})\n", existing, nfa_node_id, e.priority);
+                    }
 
                     if (e.priority > priority_by_node[existing] || (e.priority == priority_by_node[existing] && nfa_node_id < existing))
                     {

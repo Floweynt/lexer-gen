@@ -321,8 +321,29 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "STRING",
-              "value": "RULE"
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "RULE"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "FIELD",
+                      "name": "priority",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "priority"
+                      }
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "BLANK"
@@ -358,6 +379,10 @@
           "name": "_eol"
         }
       ]
+    },
+    "priority": {
+      "type": "PATTERN",
+      "value": "[0-9]+"
     },
     "identifier": {
       "type": "PATTERN",

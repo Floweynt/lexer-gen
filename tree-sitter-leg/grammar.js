@@ -28,7 +28,14 @@ module.exports = grammar({
         state_def: ($) => seq("STATE", field("name", $.identifier), "{", repeat($.rule), "}"),
         unknown_directive: ($) => seq("UNKNOWN", optional($.action), $._eol),
         error_directive: ($) => seq("ERROR", optional($.action), $._eol),
-        rule: ($) => seq(optional("RULE"), field("pattern", $._pattern), field("action", optional($.action)), $._eol),
+        rule: ($) => seq(
+            optional(seq("RULE", optional(field("priority", $.priority)))),
+            field("pattern", $._pattern),
+            field("action", optional($.action)),
+            $._eol,
+        ),
+
+        priority: ($) => /[0-9]+/,
 
         identifier: ($) => /[A-Za-z_][A-Za-z0-9_]*/,
 

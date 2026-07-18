@@ -260,6 +260,16 @@
             "named": true
           }
         ]
+      },
+      "priority": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "priority",
+            "named": true
+          }
+        ]
       }
     }
   },
@@ -482,6 +492,10 @@
   },
   {
     "type": "literal_char",
+    "named": true
+  },
+  {
+    "type": "priority",
     "named": true
   },
   {

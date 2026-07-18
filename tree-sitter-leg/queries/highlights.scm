@@ -14,6 +14,8 @@
 (macro_ref name: (identifier) @variable)
 (state_def name: (identifier) @function)
 
+(rule priority: (priority) @number)
+
 (string_literal) @string
 (regex) @string.regex
 

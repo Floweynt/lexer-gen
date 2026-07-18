@@ -283,9 +283,98 @@ namespace
 
     auto parse_atom(regex_reader& reader) -> regex;
 
+    constexpr int64_t UNBOUNDED = -1;
+
+    auto parse_bound_number(regex_reader& reader) -> int64_t
+    {
+        std::string digits;
+        while (reader.curr().type == tok::TOK_CHAR && isdigit(static_cast<unsigned char>(reader.curr().ch)))
+        {
+            digits += reader.next().ch;
+        }
+
+        if (digits.empty())
+        {
+            throw regex_parse_error("expected digit in bound repeat");
+        }
+
+        return std::stoll(digits);
+    }
+
+    auto parse_repeat_bound(regex_reader& reader) -> std::pair<int64_t, int64_t>
+    {
+        int64_t min_count = parse_bound_number(reader);
+        int64_t max_count = min_count;
+
+        if (reader.curr().type == tok::TOK_CHAR && reader.curr().ch == ',')
+        {
+            reader.next();
+            max_count =
+                reader.curr().type == tok::TOK_CHAR && isdigit(static_cast<unsigned char>(reader.curr().ch)) ? parse_bound_number(reader) : UNBOUNDED;
+        }
+
+        if (reader.curr().type != tok::TOK_CHAR || reader.curr().ch != '}')
+        {
+            throw regex_parse_error("expected '}' to close bound repeat");
+        }
+        reader.next();
+
+        if (max_count != UNBOUNDED && max_count < min_count)
+        {
+            throw regex_parse_error("bound repeat max is less than min");
+        }
+
+        return {min_count, max_count};
+    }
+
+    auto repeat_regex(const regex& atom, int64_t min_count, int64_t max_count) -> regex
+    {
+        if (min_count == 0 && max_count == 0)
+        {
+            throw regex_parse_error("bound repeat {0} matches nothing, which is not supported");
+        }
+
+        regex result;
+        for (int64_t i = 0; i < min_count; i++)
+        {
+            result = result ? result + atom : atom;
+        }
+
+        if (max_count == UNBOUNDED)
+        {
+            result = result ? result + star_regex(atom) : star_regex(atom);
+        }
+        else
+        {
+            for (int64_t i = min_count; i < max_count; i++)
+            {
+                result = result ? result + optional_regex(atom) : optional_regex(atom);
+            }
+        }
+
+        return result;
+    }
+
     auto parse_quantifier(regex_reader& reader) -> regex
     {
         regex atom = parse_atom(reader);
+
+        if (reader.curr().type == tok::TOK_CHAR && reader.curr().ch == '{')
+        {
+            auto saved_index = reader.index;
+            auto saved_curr = reader.curr_token;
+
+            reader.next();
+            if (reader.curr().type == tok::TOK_CHAR && isdigit(static_cast<unsigned char>(reader.curr().ch)))
+            {
+                auto [min_count, max_count] = parse_repeat_bound(reader);
+                return repeat_regex(atom, min_count, max_count);
+            }
+
+            reader.index = saved_index;
+            reader.curr_token = saved_curr;
+        }
+
         regex (*wrapper)(const regex&) = nullptr;
 
         switch (reader.curr().type)

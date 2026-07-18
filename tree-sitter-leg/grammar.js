@@ -57,7 +57,14 @@ module.exports = grammar({
         ),
 
         group: ($) => seq("(", repeat($._regex_term), ")"),
-        quantifier: ($) => choice("*", "+", "?"),
+        quantifier: ($) => choice("*", "+", "?", $.bound_quantifier),
+        bound_quantifier: ($) => seq(
+            "{",
+            field("min", $.number),
+            optional(seq(",", optional(field("max", $.number)))),
+            "}",
+        ),
+        number: ($) => /[0-9]+/,
         alternation_bar: ($) => "|",
         wildcard: ($) => ".",
 

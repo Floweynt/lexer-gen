@@ -57,6 +57,8 @@ namespace lexergen
             return {"\\f", true};
         case '\\':
             return {"\\\\\\\\", true};
+        case ' ':
+            return {"\\x20", true};
         default:
             break;
         }

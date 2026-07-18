@@ -351,8 +351,11 @@ auto main(int argc, const char* argv[]) -> int
         exit(-1);
     }
 
-    const bool multi_state = state_tables.size() > 1;
     auto base_fn_name = std::string(lexergen::base_fn_name(lang));
+
+    std::vector<lexergen::dfa> dfas;
+    std::vector<lexergen::nfa_builder> nfas;
+    std::vector<std::string> names;
 
     for (std::size_t i = 0; i < state_tables.size(); i++)
     {
@@ -368,40 +371,50 @@ auto main(int argc, const char* argv[]) -> int
 
         auto res = dfa.codegen(out, preamble, entry.handle_error, entry.handle_internal_error, lang, fn_name, i == 0, defer_accept);
 
-        if (args["dfa-out"].present)
-        {
-            auto path =
-                multi_state ? std::format("{}.{}.dot", args["dfa-out"].value, entry.name.empty() ? "default" : entry.name) : args["dfa-out"].value;
-            std::ofstream dot_out(path);
-            if (!dot_out)
-            {
-                std::cerr << "unable to open file: " << path << '\n';
-                exit(-1);
-            }
-
-            dfa.dump(dot_out);
-        }
-
-        if (args["nfa-out"].present)
-        {
-            auto path =
-                multi_state ? std::format("{}.{}.dot", args["nfa-out"].value, entry.name.empty() ? "default" : entry.name) : args["nfa-out"].value;
-            std::ofstream dot_out(path);
-            if (!dot_out)
-            {
-                std::cerr << "unable to open file: " << path << '\n';
-                exit(-1);
-            }
-
-            nfa.dump(dot_out);
-        }
-
         if (args["debug"].present)
         {
             std::cout << std::format("[{}] start state: {}\n", fn_name, dfa.get_start_state());
             std::cout << std::format("[{}] states {}\n", fn_name, dfa.get_end_bitmask().size());
             std::cout << std::format("[{}] emitted states: {}, emitted case labels: {}\n", fn_name, res.state_count, res.case_count);
         }
+
+        names.push_back(entry.name.empty() ? base_fn_name : entry.name);
+        dfas.push_back(std::move(dfa));
+        nfas.push_back(std::move(nfa));
+    }
+
+    if (args["dfa-out"].present)
+    {
+        std::ofstream dot_out(args["dfa-out"].value);
+        if (!dot_out)
+        {
+            std::cerr << "unable to open file: " << args["dfa-out"].value << '\n';
+            exit(-1);
+        }
+
+        std::vector<std::pair<std::string, const lexergen::dfa*>> entries;
+        for (std::size_t i = 0; i < dfas.size(); i++)
+        {
+            entries.emplace_back(names[i], &dfas[i]);
+        }
+        lexergen::dump_all(dot_out, entries);
+    }
+
+    if (args["nfa-out"].present)
+    {
+        std::ofstream dot_out(args["nfa-out"].value);
+        if (!dot_out)
+        {
+            std::cerr << "unable to open file: " << args["nfa-out"].value << '\n';
+            exit(-1);
+        }
+
+        std::vector<std::pair<std::string, const lexergen::nfa_builder*>> entries;
+        for (std::size_t i = 0; i < nfas.size(); i++)
+        {
+            entries.emplace_back(names[i], &nfas[i]);
+        }
+        lexergen::dump_all(dot_out, entries);
     }
 
     if (!file_end.empty())

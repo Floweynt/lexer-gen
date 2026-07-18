@@ -54,7 +54,8 @@ namespace lexergen
             std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
             std::string_view fn_name = "", bool emit_prelude = true, bool defer_accept = false
         ) const -> codegen_result;
-        void dump(std::ostream& ofs);
+        void dump(std::ostream& ofs) const;
+        void dump_cluster(std::ostream& ofs, int64_t node_offset, std::string_view label) const;
 
         constexpr auto get_transition_table() const -> const auto& { return transition_table; }
         constexpr auto get_start_state() const -> const auto& { return start_state; }
@@ -64,4 +65,6 @@ namespace lexergen
         auto get_class_count() const -> auto { return classes.class_count(); }
         auto get_classes() const -> const auto& { return classes; }
     };
+
+    void dump_all(std::ostream& ofs, const std::vector<std::pair<std::string, const dfa*>>& entries);
 } // namespace lexergen

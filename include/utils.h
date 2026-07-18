@@ -56,7 +56,7 @@ namespace lexergen
         case '\f':
             return {"\\f", true};
         case '\\':
-            return {"\\\\", true};
+            return {"\\\\\\\\", true};
         default:
             break;
         }
@@ -74,6 +74,10 @@ namespace lexergen
         if (cp <= 0x7F)
         {
             return fmt_char(static_cast<char>(cp));
+        }
+        if (cp <= 0xFF)
+        {
+            return {std::format("\\x{:02x}", cp), true};
         }
         return {std::format("\\u{{{:04X}}}", cp), true};
     }

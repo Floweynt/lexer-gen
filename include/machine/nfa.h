@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <ostream>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -66,6 +68,9 @@ namespace lexergen
         [[nodiscard]] auto get_classes() const -> const equivalence_classes& { return classes; }
 
         auto build() -> dfa;
-        void dump(std::ostream& ofs);
+        void dump(std::ostream& ofs) const;
+        void dump_cluster(std::ostream& ofs, int64_t node_offset, std::string_view label) const;
     };
+
+    void dump_all(std::ostream& ofs, const std::vector<std::pair<std::string, const nfa_builder*>>& entries);
 } // namespace lexergen

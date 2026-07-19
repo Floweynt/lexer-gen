@@ -8,6 +8,7 @@ sources = [
   'src/machine/dfa.cpp',
   'src/machine/nfa.cpp',
   'src/argparse.cpp',
+  'src/diagnostics.cpp',
   'src/dump.cpp',
   'src/lexergen.cpp',
   'src/regex.cpp',

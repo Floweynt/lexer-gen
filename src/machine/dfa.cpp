@@ -927,6 +927,44 @@ static size_t {0}(const char* p, size_t n)
         return {.state_count = dfa.state_count, .case_count = total_cases};
     }
 
+    auto describe_cp_plain(uint32_t cp) -> std::string
+    {
+        switch (cp)
+        {
+        case '\n':
+            return "\\n";
+        case '\r':
+            return "\\r";
+        case '\t':
+            return "\\t";
+        case '\0':
+            return "\\0";
+        case '\\':
+            return "\\\\";
+        default:
+            break;
+        }
+
+        if (cp >= 0x20 && cp < 0x7F)
+        {
+            return std::string(1, static_cast<char>(cp));
+        }
+        if (cp <= 0xFF)
+        {
+            return std::format("\\x{:02x}", cp);
+        }
+        return std::format("U+{:04X}", cp);
+    }
+
+    auto describe_interval_plain(lexergen::interval_set::codepoint lo, lexergen::interval_set::codepoint hi) -> std::string
+    {
+        if (lo == hi)
+        {
+            return describe_cp_plain(lo);
+        }
+        return std::format("{}-{}", describe_cp_plain(lo), describe_cp_plain(hi));
+    }
+
 } // namespace
 
 auto lexergen::dfa::codegen(
@@ -959,4 +997,102 @@ auto lexergen::dfa::codegen(
     }
 
     return {.state_count = 0, .case_count = 0};
+}
+
+auto lexergen::dfa::analyze_warnings(bool check_unmatchable, bool check_past_end) const -> dfa_warnings
+{
+    dfa_warnings result;
+    const auto state_count = get_state_count();
+    const auto row_width = static_cast<int64_t>(classes.class_count()) + 1;
+
+    if (check_unmatchable)
+    {
+        std::vector<bool> unconfirmed(static_cast<std::size_t>(state_count), false);
+        std::vector<int64_t> queue{start_state};
+        unconfirmed[static_cast<std::size_t>(start_state)] = true;
+
+        for (std::size_t qi = 0; qi < queue.size(); qi++)
+        {
+            auto s = queue[qi];
+            if (end_bitmask[static_cast<std::size_t>(s)])
+            {
+                continue;
+            }
+
+            for (int64_t c = 0; c < row_width; c++)
+            {
+                auto t = transition_table[static_cast<std::size_t>((s * row_width) + c)];
+                if (t == -1 || unconfirmed[static_cast<std::size_t>(t)])
+                {
+                    continue;
+                }
+                unconfirmed[static_cast<std::size_t>(t)] = true;
+                queue.push_back(t);
+            }
+        }
+
+        for (int64_t s = 0; s < state_count; s++)
+        {
+            if (!unconfirmed[static_cast<std::size_t>(s)] || end_bitmask[static_cast<std::size_t>(s)])
+            {
+                continue;
+            }
+
+            for (int64_t c = 0; c < row_width; c++)
+            {
+                if (transition_table[static_cast<std::size_t>((s * row_width) + c)] != -1)
+                {
+                    continue;
+                }
+
+                std::string detail;
+                if (c < static_cast<int64_t>(classes.class_count()))
+                {
+                    auto iv = classes.class_interval(c);
+                    detail = std::format("state {} can fail to match on '{}' with no token matched yet", s, describe_interval_plain(iv.lo, iv.hi));
+                }
+                else
+                {
+                    detail = std::format("state {} can fail to match on out-of-range input with no token matched yet", s);
+                }
+                result.unmatchable.push_back({.state = s, .detail = std::move(detail)});
+                break;
+            }
+        }
+    }
+
+    if (check_past_end)
+    {
+        auto zero_class = classes.classify(0);
+        for (int64_t s = 0; s < state_count; s++)
+        {
+            auto t = transition_table[static_cast<std::size_t>((s * row_width) + zero_class)];
+            if (t == -1)
+            {
+                continue;
+            }
+
+            bool target_peeks_again = false;
+            for (int64_t c = 0; c < row_width; c++)
+            {
+                if (transition_table[static_cast<std::size_t>((t * row_width) + c)] != -1)
+                {
+                    target_peeks_again = true;
+                    break;
+                }
+            }
+
+            if (!target_peeks_again)
+            {
+                continue;
+            }
+
+            result.past_the_end.push_back(
+                {.state = s,
+                 .detail = std::format("state {} consumes '\\0' but doesn't stop there, landing in state {} which peeks further input", s, t)}
+            );
+        }
+    }
+
+    return result;
 }

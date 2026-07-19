@@ -1,5 +1,6 @@
 #include "argparse.h"
 #include "build_config.h"
+#include "diagnostics.h"
 #include "machine/cg.h"
 #include "machine/dfa.h"
 #include "machine/nfa.h"
@@ -16,6 +17,14 @@
 
 namespace
 {
+    void report_warnings(const std::vector<lexergen::dfa_warning>& entries, std::string_view fn_name, std::string_view kind)
+    {
+        for (const auto& w : entries)
+        {
+            std::cerr << lexergen::warn_prefix() << std::format("[{}] `{}`: {}\n", kind, fn_name, w.detail);
+        }
+    }
+
     auto trim(std::string_view str) -> std::string_view
     {
         auto start = str.find_first_not_of(" \t\r");
@@ -112,6 +121,30 @@ inline static constexpr lexergen::option options[] = {
         .long_flag = "--simd",
         .short_flag = "-S",
         .description = "(cpp/c targets) emit a SIMD bulk-scan fast path for self-loop states",
+        .has_args = false,
+        .required = false,
+    },
+    {
+        .name = "warn-unmatchable-token",
+        .long_flag = "--warn-unmatchable-token",
+        .short_flag = "-Wunmatchable-token",
+        .description = "warn if a state reachable before any token has matched can still fail to match (input would hit the UNKNOWN handler)",
+        .has_args = false,
+        .required = false,
+    },
+    {
+        .name = "warn-past-the-end",
+        .long_flag = "--warn-past-the-end",
+        .short_flag = "-Wpast-the-end",
+        .description = "warn if consuming a NUL byte ('\\0') doesn't immediately stop matching (risk of reading past a null-terminated buffer)",
+        .has_args = false,
+        .required = false,
+    },
+    {
+        .name = "warn-all",
+        .long_flag = "--warn-all",
+        .short_flag = "-Wall",
+        .description = "enable all warning flags above",
         .has_args = false,
         .required = false,
     },
@@ -342,6 +375,8 @@ auto main(int argc, const char* argv[]) -> int
     }
 
     const bool enable_simd = args["simd"].present;
+    const bool warn_unmatchable = args["warn-unmatchable-token"].present || args["warn-all"].present;
+    const bool warn_past_end = args["warn-past-the-end"].present || args["warn-all"].present;
 
     std::ofstream out(args["cpp-out"].value);
     if (!out)
@@ -369,6 +404,13 @@ auto main(int argc, const char* argv[]) -> int
         }
 
         auto res = dfa.codegen(out, preamble, entry.handle_error, entry.handle_internal_error, lang, fn_name, i == 0, enable_simd);
+
+        if (warn_unmatchable || warn_past_end)
+        {
+            auto diag = dfa.analyze_warnings(warn_unmatchable, warn_past_end);
+            report_warnings(diag.unmatchable, fn_name, "unmatchable-token");
+            report_warnings(diag.past_the_end, fn_name, "past-the-end");
+        }
 
         if (args["debug"].present)
         {

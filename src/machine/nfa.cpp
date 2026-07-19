@@ -1,4 +1,5 @@
 #include "machine/nfa.h"
+#include "diagnostics.h"
 #include "fwd.h"
 #include "machine/data.h"
 #include <algorithm>
@@ -131,7 +132,8 @@ auto lexergen::nfa_builder::build() -> dfa
 
                     if (e.priority == priority_by_node[existing])
                     {
-                        std::cerr << std::format("possible conflict between states {} and {} (priority {})\n", existing, nfa_node_id, e.priority);
+                        std::cerr << lexergen::warn_prefix()
+                                   << std::format("[state-conflict] states {} and {} both match with priority {}\n", existing, nfa_node_id, e.priority);
                     }
 
                     if (e.priority > priority_by_node[existing] || (e.priority == priority_by_node[existing] && nfa_node_id < existing))

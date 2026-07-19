@@ -25,6 +25,18 @@ namespace lexergen
         std::size_t case_count;
     };
 
+    struct dfa_warning
+    {
+        int64_t state;
+        std::string detail;
+    };
+
+    struct dfa_warnings
+    {
+        std::vector<dfa_warning> unmatchable;
+        std::vector<dfa_warning> past_the_end;
+    };
+
     class dfa
     {
         friend class nfa_builder;
@@ -56,6 +68,7 @@ namespace lexergen
         ) const -> codegen_result;
         void dump(std::ostream& ofs) const;
         void dump_cluster(std::ostream& ofs, int64_t node_offset, std::string_view label) const;
+        auto analyze_warnings(bool check_unmatchable, bool check_past_end) const -> dfa_warnings;
 
         constexpr auto get_transition_table() const -> const auto& { return transition_table; }
         constexpr auto get_start_state() const -> const auto& { return start_state; }

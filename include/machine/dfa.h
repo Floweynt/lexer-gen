@@ -52,7 +52,7 @@ namespace lexergen
 
         auto codegen(
             std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
-            std::string_view fn_name = "", bool emit_prelude = true, bool defer_accept = false
+            std::string_view fn_name = "", bool emit_prelude = true, bool enable_simd = false
         ) const -> codegen_result;
         void dump(std::ostream& ofs) const;
         void dump_cluster(std::ostream& ofs, int64_t node_offset, std::string_view label) const;

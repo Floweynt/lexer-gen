@@ -45,4 +45,12 @@ public:
     [[nodiscard]] auto text() const -> std::string_view { return {tok_start, cur}; }
 
     [[nodiscard]] auto bytes() const -> std::size_t { return bytes_; }
+
+    [[nodiscard]] auto remaining() const -> std::string_view { return {la, static_cast<std::size_t>(end - la)}; }
+
+    void skip(std::size_t n)
+    {
+        la += n;
+        la_bytes_ += n;
+    }
 };

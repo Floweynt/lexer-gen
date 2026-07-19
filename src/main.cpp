@@ -108,11 +108,10 @@ inline static constexpr lexergen::option options[] = {
         .required = false,
     },
     {
-        .name = "defer-accept",
-        .long_flag = "--defer-accept",
-        .short_flag = "-A",
-        .description = "cpp/c targets: defer Source::accept() to end-of-token instead of every intermediate match "
-                       "(usually slower for grammars with long tokens; off by default)",
+        .name = "simd",
+        .long_flag = "--simd",
+        .short_flag = "-S",
+        .description = "(cpp/c targets) emit a SIMD bulk-scan fast path for self-loop states",
         .has_args = false,
         .required = false,
     },
@@ -342,7 +341,7 @@ auto main(int argc, const char* argv[]) -> int
         lang = *inferred;
     }
 
-    const bool defer_accept = args["defer-accept"].present;
+    const bool enable_simd = args["simd"].present;
 
     std::ofstream out(args["cpp-out"].value);
     if (!out)
@@ -369,7 +368,7 @@ auto main(int argc, const char* argv[]) -> int
             dfa.optimize(args["debug"].present);
         }
 
-        auto res = dfa.codegen(out, preamble, entry.handle_error, entry.handle_internal_error, lang, fn_name, i == 0, defer_accept);
+        auto res = dfa.codegen(out, preamble, entry.handle_error, entry.handle_internal_error, lang, fn_name, i == 0, enable_simd);
 
         if (args["debug"].present)
         {

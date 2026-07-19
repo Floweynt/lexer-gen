@@ -58,3 +58,19 @@ static lex_text Source_text(const Source* s)
 }
 
 static size_t Source_bytes(const Source* s) { return s->bytes; }
+
+#define LEXGEN_C_SOURCE_HAS_SCAN 1
+
+static lex_text Source_remaining(const Source* s)
+{
+    lex_text t;
+    t.ptr = s->la;
+    t.len = (size_t)(s->end - s->la);
+    return t;
+}
+
+static void Source_skip(Source* s, size_t n)
+{
+    s->la += n;
+    s->la_bytes += n;
+}

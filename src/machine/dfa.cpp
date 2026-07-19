@@ -246,6 +246,187 @@ namespace
 
     auto needs_unicode_decode(const dfa_view& dfa) -> bool { return dfa.classes.max_codepoint() > 0xFF; }
 
+    constexpr std::size_t SIMD_MAX_STOP_BYTES = 8;
+
+    auto find_simd_states(const dfa_view& dfa) -> std::unordered_map<int64_t, std::vector<char>>
+    {
+        std::unordered_map<int64_t, std::vector<char>> result;
+        if (needs_unicode_decode(dfa))
+        {
+            return result;
+        }
+
+        const auto row_width = static_cast<int64_t>(dfa.classes.class_count()) + 1;
+
+        for (int64_t state = 0; state < static_cast<int64_t>(dfa.state_count); state++)
+        {
+            std::vector<bool> safe(256, false);
+            bool has_self_loop = false;
+
+            for (int64_t class_id = 0; class_id < row_width; class_id++)
+            {
+                if (dfa.transition_table[static_cast<std::size_t>((state * row_width) + class_id)] != state)
+                {
+                    continue;
+                }
+                has_self_loop = true;
+
+                if (class_id >= static_cast<int64_t>(dfa.classes.class_count()))
+                {
+                    continue;
+                }
+
+                auto interval = dfa.classes.class_interval(class_id);
+                for (auto cp = interval.lo; cp <= interval.hi && cp <= 0xFF; cp++)
+                {
+                    safe[cp] = true;
+                }
+            }
+
+            if (!has_self_loop)
+            {
+                continue;
+            }
+
+            std::vector<char> stops;
+            for (int byte = 0; byte < 256 && stops.size() <= SIMD_MAX_STOP_BYTES; byte++)
+            {
+                if (!safe[static_cast<std::size_t>(byte)])
+                {
+                    stops.push_back(static_cast<char>(byte));
+                }
+            }
+
+            if (!stops.empty() && stops.size() <= SIMD_MAX_STOP_BYTES)
+            {
+                result[state] = std::move(stops);
+            }
+        }
+
+        return result;
+    }
+
+    void emit_simd_prelude(std::ostream& out)
+    {
+        out << R"cpp(#ifndef LEXGEN_SIMD_SCAN_DEFINED
+#define LEXGEN_SIMD_SCAN_DEFINED
+namespace lexgen_simd {
+
+#if defined(__AVX2__)
+#include <immintrin.h>
+template <char... Stops>
+inline std::size_t scan_safe_run(const char* p, std::size_t n)
+{
+    std::size_t i = 0;
+    while (i + 32 <= n)
+    {
+        __m256i chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(p + i));
+        __m256i mask = _mm256_setzero_si256();
+        ((mask = _mm256_or_si256(mask, _mm256_cmpeq_epi8(chunk, _mm256_set1_epi8(Stops)))), ...);
+        unsigned bits = static_cast<unsigned>(_mm256_movemask_epi8(mask));
+        if (bits != 0)
+        {
+#if defined(_MSC_VER)
+            unsigned long idx;
+            _BitScanForward(&idx, bits);
+            return i + idx;
+#else
+            return i + static_cast<std::size_t>(__builtin_ctz(bits));
+#endif
+        }
+        i += 32;
+    }
+    while (i < n)
+    {
+        char c = p[i];
+        if (((c == Stops) || ...)) { return i; }
+        i++;
+    }
+    return i;
+}
+#elif defined(__SSE4_2__)
+#include <nmmintrin.h>
+template <char... Stops>
+inline std::size_t scan_safe_run(const char* p, std::size_t n)
+{
+    alignas(16) static constexpr char needle[16] = {Stops...};
+    constexpr int needle_len = static_cast<int>(sizeof...(Stops));
+    __m128i needle_vec = _mm_loadu_si128(reinterpret_cast<const __m128i*>(needle));
+    std::size_t i = 0;
+    while (i + 16 <= n)
+    {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + i));
+        int idx = _mm_cmpestri(needle_vec, needle_len, chunk, 16, _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_LEAST_SIGNIFICANT);
+        if (idx < 16) { return i + static_cast<std::size_t>(idx); }
+        i += 16;
+    }
+    while (i < n)
+    {
+        char c = p[i];
+        if (((c == Stops) || ...)) { return i; }
+        i++;
+    }
+    return i;
+}
+#elif defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+template <char... Stops>
+inline std::size_t scan_safe_run(const char* p, std::size_t n)
+{
+    std::size_t i = 0;
+    while (i + 16 <= n)
+    {
+        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + i));
+        __m128i mask = _mm_setzero_si128();
+        ((mask = _mm_or_si128(mask, _mm_cmpeq_epi8(chunk, _mm_set1_epi8(Stops)))), ...);
+        unsigned bits = static_cast<unsigned>(_mm_movemask_epi8(mask));
+        if (bits != 0)
+        {
+#if defined(_MSC_VER)
+            unsigned long idx;
+            _BitScanForward(&idx, bits);
+            return i + idx;
+#else
+            return i + static_cast<std::size_t>(__builtin_ctz(bits));
+#endif
+        }
+        i += 16;
+    }
+    while (i < n)
+    {
+        char c = p[i];
+        if (((c == Stops) || ...)) { return i; }
+        i++;
+    }
+    return i;
+}
+#else
+template <char... Stops>
+inline std::size_t scan_safe_run(const char* p, std::size_t n)
+{
+    std::size_t i = 0;
+    while (i < n)
+    {
+        char c = p[i];
+        if (((c == Stops) || ...)) { return i; }
+        i++;
+    }
+    return i;
+}
+#endif
+
+template <typename Source, typename = void>
+struct has_bulk_scan : std::false_type {};
+template <typename Source>
+struct has_bulk_scan<Source, std::void_t<decltype(std::declval<Source&>().remaining()), decltype(std::declval<Source&>().skip(std::size_t{}))>>
+    : std::true_type {};
+
+} // namespace lexgen_simd
+#endif
+
+)cpp";
+    }
+
     auto emit_c_family_classifier(std::ostream& out, const dfa_view& dfa, std::string_view peek_expr, bool is_cpp) -> std::string
     {
         const auto class_count = dfa.classes.class_count();
@@ -305,25 +486,31 @@ namespace
 
     auto emit_cpp(
         std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error,
-        bool defer_accept
+        bool enable_simd
     ) -> lexergen::codegen_result
     {
         if (dfa.emit_prelude)
         {
-            out << "#include <cstdint>\n#include <cstddef>\n#include <string_view>\n\n" << inc << "\n\n";
+            out << "#include <cstdint>\n#include <cstddef>\n#include <string_view>\n\n";
+            if (enable_simd)
+            {
+                out << "#include <type_traits>\n#include <utility>\n\n";
+            }
+            out << inc << "\n\n";
         }
 
-        const bool deferred = defer_accept && !needs_unicode_decode(dfa);
-        auto class_expr = emit_c_family_classifier(out, dfa, deferred ? "(consumed++, src.peek())" : "src.peek()", true);
+        auto simd_states = enable_simd ? find_simd_states(dfa) : std::unordered_map<int64_t, std::vector<char>>{};
+        if (dfa.emit_prelude && enable_simd)
+        {
+            emit_simd_prelude(out);
+        }
+
+        auto class_expr = emit_c_family_classifier(out, dfa, "src.peek()", true);
 
         out << "template <typename Source, typename Ctx>\n";
-        out << std::format("auto {}(Source& src, Ctx& ctx)\n{{\n", dfa.fn_name);
+        out << std::format("[[gnu::always_inline]] inline auto {}(Source& src, Ctx& ctx)\n{{\n", dfa.fn_name);
         out << "    (void)ctx;\n";
         out << "    int64_t latest_match = -1;\n";
-        if (deferred)
-        {
-            out << "    int64_t consumed = 0;\n    int64_t matched_consumed = 0;\n";
-        }
         out << "\n    src.start_token();\n";
         out << "    [[maybe_unused]] std::size_t start_bytes = src.bytes();\n\n";
         out << std::format("    goto STATE_{};\n\n", dfa.start_state);
@@ -334,16 +521,26 @@ namespace
         {
             out << std::format("STATE_{}:\n", state);
 
+            if (auto simd_it = simd_states.find(state); simd_it != simd_states.end())
+            {
+                out << "    if constexpr (lexgen_simd::has_bulk_scan<Source>::value)\n    {\n";
+                out << "        auto simd_span = src.remaining();\n";
+                out << "        auto simd_n = lexgen_simd::scan_safe_run<";
+                for (std::size_t i = 0; i < simd_it->second.size(); i++)
+                {
+                    if (i != 0)
+                    {
+                        out << ", ";
+                    }
+                    out << "(char)" << static_cast<int>(static_cast<unsigned char>(simd_it->second[i]));
+                }
+                out << ">(simd_span.data(), simd_span.size());\n";
+                out << "        if (simd_n > 0) { src.skip(simd_n); }\n    }\n";
+            }
+
             if (dfa.end_bitmask[state])
             {
-                if (deferred)
-                {
-                    out << std::format("    latest_match = {};\n    matched_consumed = consumed;\n", dfa.end_to_nfa_state[state]);
-                }
-                else
-                {
-                    out << std::format("    latest_match = {};\n    src.accept();\n", dfa.end_to_nfa_state[state]);
-                }
+                out << std::format("    latest_match = {};\n    src.accept();\n", dfa.end_to_nfa_state[state]);
             }
 
             auto groups = build_class_groups(dfa, state);
@@ -371,11 +568,6 @@ namespace
         out << "        " << handle_error << "\n";
         out << "    }\n\n";
         out << "    src.backtrack();\n";
-        if (deferred)
-        {
-            out << "    for (int64_t i = 0; i < matched_consumed; i++) { src.peek(); }\n";
-            out << "    src.accept();\n";
-        }
         out << "    {\n";
         out << "        [[maybe_unused]] std::string_view buffer = src.text();\n";
         out << "        switch (latest_match)\n        {\n";
@@ -389,10 +581,6 @@ namespace
         out << "        }\n    }\n\n";
 
         out << "    latest_match = -1;\n";
-        if (deferred)
-        {
-            out << "    consumed = 0;\n";
-        }
         out << "    src.start_token();\n";
         out << "    start_bytes = src.bytes();\n";
         out << std::format("    goto STATE_{};\n", dfa.start_state);
@@ -401,9 +589,75 @@ namespace
         return {.state_count = dfa.state_count, .case_count = total_cases};
     }
 
+    void emit_simd_scan_fn_c(std::ostream& out, const std::string& name, const std::vector<char>& stops)
+    {
+        std::string mask_lines;
+        for (auto stop : stops)
+        {
+            mask_lines += std::format(
+                "        mask = _mm_or_si128(mask, _mm_cmpeq_epi8(chunk, _mm_set1_epi8((char){})));\n", static_cast<int>(static_cast<unsigned char>(stop))
+            );
+        }
+
+        std::string cmp_chain;
+        for (std::size_t i = 0; i < stops.size(); i++)
+        {
+            cmp_chain += std::format("{}c == (char){}", i == 0 ? "" : " || ", static_cast<int>(static_cast<unsigned char>(stops[i])));
+        }
+
+        out << std::format(
+            R"c(#if defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+static size_t {0}(const char* p, size_t n)
+{{
+    size_t i = 0;
+    while (i + 16 <= n)
+    {{
+        __m128i chunk = _mm_loadu_si128((const __m128i*)(p + i));
+        __m128i mask = _mm_setzero_si128();
+{1}        {{
+        unsigned bits = (unsigned)_mm_movemask_epi8(mask);
+        if (bits != 0)
+        {{
+#if defined(_MSC_VER)
+            unsigned long idx; _BitScanForward(&idx, bits); return i + idx;
+#else
+            return i + (size_t)__builtin_ctz(bits);
+#endif
+        }}
+        }}
+        i += 16;
+    }}
+    while (i < n)
+    {{
+        char c = p[i];
+        if ({2}) {{ return i; }}
+        i++;
+    }}
+    return i;
+}}
+#else
+static size_t {0}(const char* p, size_t n)
+{{
+    size_t i = 0;
+    while (i < n)
+    {{
+        char c = p[i];
+        if ({2}) {{ return i; }}
+        i++;
+    }}
+    return i;
+}}
+#endif
+
+)c",
+            name, mask_lines, cmp_chain
+        );
+    }
+
     auto emit_c(
         std::ostream& out, const dfa_view& dfa, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error,
-        bool defer_accept
+        bool enable_simd
     ) -> lexergen::codegen_result
     {
         if (dfa.emit_prelude)
@@ -412,17 +666,29 @@ namespace
             out << "typedef struct { const char *ptr; size_t len; } lex_text;\n\n";
             out << inc << "\n\n";
             out << "#ifndef LEX_RESULT_TYPE\n#define LEX_RESULT_TYPE int\n#endif\n\n";
+            out << "#if defined(__GNUC__) || defined(__clang__)\n#define LEXGEN_ALWAYS_INLINE __attribute__((always_inline)) inline\n#else\n#define "
+                   "LEXGEN_ALWAYS_INLINE inline\n#endif\n\n";
         }
-        const bool deferred = defer_accept && !needs_unicode_decode(dfa);
-        auto class_expr = emit_c_family_classifier(out, dfa, deferred ? "(consumed++, Source_peek(src))" : "Source_peek(src)", false);
 
-        out << std::format("LEX_RESULT_TYPE {}(Source *src, Ctx *ctx)\n{{\n", dfa.fn_name);
+        auto simd_states = enable_simd ? find_simd_states(dfa) : std::unordered_map<int64_t, std::vector<char>>{};
+        std::unordered_map<int64_t, std::string> simd_fn_names;
+        if (enable_simd && !simd_states.empty())
+        {
+            const auto prefix = std::string(dfa.fn_name) + "_";
+            int64_t idx = 0;
+            for (const auto& [state, stops] : simd_states)
+            {
+                auto name = std::format("{}scan_safe_run_{}", prefix, idx++);
+                emit_simd_scan_fn_c(out, name, stops);
+                simd_fn_names[state] = name;
+            }
+        }
+
+        auto class_expr = emit_c_family_classifier(out, dfa, "Source_peek(src)", false);
+
+        out << std::format("LEXGEN_ALWAYS_INLINE LEX_RESULT_TYPE {}(Source *src, Ctx *ctx)\n{{\n", dfa.fn_name);
         out << "    (void)ctx;\n";
         out << "    int64_t latest_match = -1;\n";
-        if (deferred)
-        {
-            out << "    int64_t consumed = 0;\n    int64_t matched_consumed = 0;\n";
-        }
         out << "\n    Source_start_token(src);\n";
         out << "    size_t start_bytes = Source_bytes(src);\n";
         out << "    (void)start_bytes;\n\n";
@@ -434,16 +700,17 @@ namespace
         {
             out << std::format("STATE_{}:\n", state);
 
+            if (auto simd_it = simd_fn_names.find(state); simd_it != simd_fn_names.end())
+            {
+                out << "#ifdef LEXGEN_C_SOURCE_HAS_SCAN\n    {\n";
+                out << "        lex_text simd_span = Source_remaining(src);\n";
+                out << std::format("        size_t simd_n = {}(simd_span.ptr, simd_span.len);\n", simd_it->second);
+                out << "        if (simd_n > 0) { Source_skip(src, simd_n); }\n    }\n#endif\n";
+            }
+
             if (dfa.end_bitmask[state])
             {
-                if (deferred)
-                {
-                    out << std::format("    latest_match = {};\n    matched_consumed = consumed;\n", dfa.end_to_nfa_state[state]);
-                }
-                else
-                {
-                    out << std::format("    latest_match = {};\n    Source_accept(src);\n", dfa.end_to_nfa_state[state]);
-                }
+                out << std::format("    latest_match = {};\n    Source_accept(src);\n", dfa.end_to_nfa_state[state]);
             }
 
             auto groups = build_class_groups(dfa, state);
@@ -471,11 +738,6 @@ namespace
         out << "        " << handle_error << "\n";
         out << "    }\n\n";
         out << "    Source_backtrack(src);\n";
-        if (deferred)
-        {
-            out << "    { int64_t i; for (i = 0; i < matched_consumed; i++) { Source_peek(src); } }\n";
-            out << "    Source_accept(src);\n";
-        }
         out << "    {\n";
         out << "        lex_text buffer = Source_text(src);\n";
         out << "        (void)buffer;\n";
@@ -490,10 +752,6 @@ namespace
         out << "        }\n    }\n\n";
 
         out << "    latest_match = -1;\n";
-        if (deferred)
-        {
-            out << "    consumed = 0;\n";
-        }
         out << "    Source_start_token(src);\n";
         out << "    start_bytes = Source_bytes(src);\n";
         out << std::format("    goto STATE_{};\n", dfa.start_state);
@@ -673,7 +931,7 @@ namespace
 
 auto lexergen::dfa::codegen(
     std::ostream& out, const std::string& inc, const std::string& handle_error, const std::string& handle_internal_error, target_lang lang,
-    std::string_view fn_name, bool emit_prelude, bool defer_accept
+    std::string_view fn_name, bool emit_prelude, bool enable_simd
 ) const -> codegen_result
 {
     const dfa_view view{
@@ -691,9 +949,9 @@ auto lexergen::dfa::codegen(
     switch (lang)
     {
     case target_lang::CPP:
-        return emit_cpp(out, view, inc, handle_error, handle_internal_error, defer_accept);
+        return emit_cpp(out, view, inc, handle_error, handle_internal_error, enable_simd);
     case target_lang::C:
-        return emit_c(out, view, inc, handle_error, handle_internal_error, defer_accept);
+        return emit_c(out, view, inc, handle_error, handle_internal_error, enable_simd);
     case target_lang::JAVA:
         return emit_switch_loop(out, view, inc, handle_error, handle_internal_error, true);
     case target_lang::JS:
